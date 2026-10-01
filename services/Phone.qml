@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Caelestia
 
 // The scrcpy mirror of the handset, as a quick toggle.
 //
@@ -54,10 +55,19 @@ Singleton {
     // which takes a few seconds; hold the toggle on for that window so it does
     // not snap back under the cursor.
     property bool connecting: false
+    property string pendingAction: ""
 
     onRunningChanged: {
-        if (running)
+        if (running) {
             connecting = false;
+            if (pendingAction === "start") {
+                Toaster.toast(qsTr("Phone mirror enabled"), windowTitle ? qsTr("Mirroring %1").arg(windowTitle) : qsTr("The phone mirror is running"), "smartphone");
+                pendingAction = "";
+            }
+        } else if (pendingAction === "stop") {
+            Toaster.toast(qsTr("Phone mirror disabled"), windowTitle ? qsTr("Disconnected from %1").arg(windowTitle) : qsTr("The phone mirror has stopped"), "phonelink_off");
+            pendingAction = "";
+        }
     }
 
     function toggle(): void {
@@ -102,6 +112,7 @@ Singleton {
     function start(): void {
         if (root.running)
             return;
+        root.pendingAction = "start";
         root.connecting = true;
         // Detached on purpose: the mirror must outlive a shell restart.
         Quickshell.execDetached([root.bin]);
@@ -110,14 +121,19 @@ Singleton {
     }
 
     function stop(): void {
+        const wasRunning = root.running;
         root.connecting = false;
         settle.stop();
-        if (root.toplevel)
+        if (wasRunning) {
+            root.pendingAction = "stop";
             root.toplevel.close();
-        else if (!killer.running)
+        } else if (!killer.running) {
             // Nothing on screen yet -- this is aborting a start still stuck in
             // discovery, so the process has to be reached directly.
             killer.running = true;
+            root.pendingAction = "";
+            Toaster.toast(qsTr("Phone mirror cancelled"), qsTr("Stopped connecting to %1").arg(root.windowTitle || qsTr("the phone")), "phonelink_off");
+        }
     }
 
     Process {
@@ -180,6 +196,7 @@ Singleton {
             // given up and notified on its own.
             if (++attempts > 20 || !root.connecting) {
                 root.connecting = false;
+                root.pendingAction = "";
                 settle.stop();
             }
         }
