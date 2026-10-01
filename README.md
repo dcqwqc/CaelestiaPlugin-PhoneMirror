@@ -51,7 +51,7 @@ than a guess at it, so the shape is the real one.
 
 Clone into Caelestia's plugin directory:
 
-    git clone https://github.com/dcqwqc/caelestia-plugin-phone-mirror ~/.local/share/caelestia/plugins/phone-mirror
+    git clone https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror ~/.local/share/caelestia/plugins/phone-mirror
 
 Or clone anywhere and add the parent to `path` in
 `~/.config/caelestia/plugins.json`.

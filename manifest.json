@@ -2,7 +2,7 @@
   "name": "PhoneMirror",
   "version": "0.1.0",
   "author": "dcqwqc",
-  "homepage": "https://github.com/dcqwqc/caelestia-plugin-phone-mirror",
+  "homepage": "https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror",
   "icon": "smartphone",
   "description": "Mirror an Android handset over wireless ADB from a quick toggle, with a guided pairing flow.",
   "entryPoints": [
