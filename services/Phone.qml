@@ -23,7 +23,7 @@ Singleton {
     // Same reason as RotationLock: the shell is started by the systemd user
     // manager, whose PATH does not carry ~/.local/bin, so the launcher cannot
     // be resolved by name from here.
-    readonly property string bin: `${Quickshell.env("HOME")}/.local/bin/phone`
+    readonly property string bin: `${Quickshell.env("HOME")}/.local/share/caelestia/plugins/phone-mirror/scripts/phone`
     // The handset's name, which is also the window title the launcher pins on
     // scrcpy -- so it is what identifies a running mirror below. Read from
     // ~/.config/kagami/phone.conf via `phone status` rather than written here:

@@ -1,0 +1,398 @@
+#!/usr/bin/env python3
+"""Mirror an Android handset over wireless ADB, as a configured device.
+
+Which handset, what it is called and how hard it is pushed all live in
+~/.config/caelestia/phone-mirror/device.conf rather than in this file. Nothing here names a
+particular model.
+
+    phone                mirror the configured handset (default)
+    phone pair           pair a new handset over wireless debugging
+    phone setup          write phone.conf from a handset that is connected now
+    phone status         machine-readable state, for the shell's quick toggle
+
+Anything starting with '-' is passed straight through to scrcpy, which is what
+phone-low and phone-off rely on.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+CONFIG_DIR = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "caelestia", "phone-mirror"
+)
+CONFIG_PATH = os.path.join(CONFIG_DIR, "device.conf")
+LEGACY_CONFIG_PATH = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "kagami", "phone.conf"
+)
+
+# One-time migration from the old monolithic Kagami location. Device identity is
+# local state and never belongs in the cross-machine sync plugin.
+if not os.path.exists(CONFIG_PATH) and os.path.isfile(LEGACY_CONFIG_PATH):
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    try:
+        import shutil
+        shutil.copy2(LEGACY_CONFIG_PATH, CONFIG_PATH)
+    except OSError:
+        CONFIG_PATH = LEGACY_CONFIG_PATH
+
+DEFAULTS = {
+    "name": "Phone",
+    # Substrings identifying the handset in `adb devices -l`. Empty means "the
+    # only device connected", which is the right answer for a one-phone desk.
+    "match": "",
+    # An exact adb serial pins one handset when several are paired.
+    "serial": "",
+    "max_size": "1440",
+    "video_bitrate": "16M",
+    "max_fps": "120",
+}
+
+
+# The shell's plugin settings, if the PhoneMirror plugin is installed. Stream
+# preferences live there so they can be changed from the Plugins page; the
+# handset's identity stays in phone.conf, which is per-machine.
+PLUGIN_ID = "dcqwqc/phonemirror"
+PLUGIN_CONFIG = os.path.join(
+    os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")),
+    "caelestia",
+    "plugins.json",
+)
+# plugin setting -> phone.conf key, and how to render it
+PLUGIN_SETTINGS = {
+    "maxSize": ("max_size", str),
+    "bitrateMbps": ("video_bitrate", lambda v: f"{v}M"),
+    "maxFps": ("max_fps", str),
+}
+
+
+def apply_plugin_settings(config):
+    """Let the Plugins page win over phone.conf for the stream knobs."""
+    try:
+        with open(PLUGIN_CONFIG) as handle:
+            settings = json.load(handle).get("settings", {}).get(PLUGIN_ID, {})
+    except (OSError, ValueError):
+        return config, {}
+    for key, (conf_key, render) in PLUGIN_SETTINGS.items():
+        if key in settings:
+            config[conf_key] = render(settings[key])
+    return config, settings
+
+
+def load_config():
+    config = dict(DEFAULTS)
+    try:
+        with open(CONFIG_PATH) as handle:
+            for line in handle:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key in config:
+                    config[key] = value.strip()
+    except OSError:
+        return config, False
+    return config, True
+
+
+def notify(config, summary, body, urgency="normal"):
+    level = "error" if urgency == "critical" else "info"
+    icon = "phonelink_off" if urgency == "critical" else "smartphone"
+    try:
+        result = subprocess.run(
+            [
+                "qs", "-c", "caelestia", "ipc", "call", "toaster", level,
+                summary, body, icon,
+            ],
+            check=False,
+            timeout=3,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if result.returncode == 0:
+            return
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        subprocess.run(
+            ["notify-send", "-a", config["name"], "-u", urgency, summary, body],
+            check=False,
+            timeout=2,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def run(cmd, timeout=None):
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def cleanup_stale():
+    for line in run(["adb", "devices"]).splitlines()[1:]:
+        parts = line.split()
+        if len(parts) >= 2 and parts[1] in ("offline", "unauthorized"):
+            run(["adb", "disconnect", parts[0]], timeout=2)
+
+
+def get_devices():
+    devices = []
+    for line in run(["adb", "devices", "-l"]).splitlines()[1:]:
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        devices.append(
+            {
+                "serial": parts[0],
+                "state": parts[1],
+                "desc": " ".join(parts[2:]),
+                "emulator": parts[0].startswith("emulator-") or "sdk_gphone" in line,
+            }
+        )
+    return devices
+
+
+def matches(device, config):
+    if config["serial"]:
+        return device["serial"] == config["serial"]
+    terms = config["match"].split()
+    if not terms:
+        return True
+    haystack = f"{device['serial']} {device['desc']}".lower()
+    return any(term.lower() in haystack for term in terms)
+
+
+def select_target(devices, config):
+    ready = [d for d in devices if d["state"] == "device"]
+    # A configured handset wins; then any physical device; then whatever is left.
+    for pool in ([d for d in ready if matches(d, config)], ready):
+        physical = [d for d in pool if not d["emulator"]]
+        if physical:
+            return physical[0]["serial"]
+        if pool:
+            return pool[0]["serial"]
+    return None
+
+
+def discover_and_connect():
+    """Find handsets advertising wireless debugging over mDNS and connect."""
+    try:
+        proc = subprocess.Popen(
+            ["avahi-browse", "-r", "-t", "-p", "_adb-tls-connect._tcp"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        out, _ = proc.communicate(timeout=3)
+    except Exception:
+        return
+    for line in out.splitlines():
+        if not line.startswith("="):
+            continue
+        parts = line.split(";")
+        if len(parts) >= 9 and "." in parts[7]:
+            run(["adb", "connect", f"{parts[7]}:{parts[8]}"], timeout=3)
+
+
+def find_target(config, announce=True):
+    run(["adb", "start-server"], timeout=5)
+    cleanup_stale()
+    target = select_target(get_devices(), config)
+    if target:
+        return target
+    if announce:
+        notify(config, config["name"], "Connecting over Wi-Fi...", "low")
+    discover_and_connect()
+    for _ in range(4):
+        time.sleep(0.5)
+        target = select_target(get_devices(), config)
+        if target:
+            return target
+    return None
+
+
+def cmd_status(config, configured):
+    target = select_target(get_devices(), config) if configured else None
+    json.dump(
+        {
+            "configured": configured,
+            "name": config["name"],
+            "title": config["name"],
+            "connected": bool(target),
+            "serial": target or "",
+            "config": CONFIG_PATH,
+        },
+        sys.stdout,
+    )
+    sys.stdout.write("\n")
+    return 0
+
+
+def cmd_pair(config):
+    """Android 11+ wireless debugging: a one-time pairing, then mDNS forever."""
+    print(f"Pairing a handset with {os.uname().nodename}.\n")
+    print("On the phone:")
+    print("  Settings -> Developer options -> Wireless debugging -> ON")
+    print("  tap 'Pair device with pairing code'\n")
+    print("It shows an address like 192.168.1.23:37105 and a six-digit code.\n")
+    try:
+        endpoint = input("address (ip:port): ").strip()
+        code = input("pairing code: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nCancelled.")
+        return 1
+    if not re.fullmatch(r"[0-9.]+:\d+", endpoint) or not code.isdigit():
+        print("\nThat does not look like an address and a code. Nothing done.")
+        return 2
+
+    run(["adb", "start-server"], timeout=5)
+    result = subprocess.run(
+        ["adb", "pair", endpoint, code], capture_output=True, text=True
+    )
+    print(result.stdout.strip() or result.stderr.strip())
+    if result.returncode != 0:
+        print("\nPairing failed. The code expires quickly -- try again.")
+        return 1
+
+    print("\nPaired. Looking for the handset over mDNS...")
+    discover_and_connect()
+    time.sleep(1)
+    if select_target(get_devices(), {"serial": "", "match": ""}):
+        print("Connected.\n")
+        return cmd_setup(config)
+    print("Paired, but it has not appeared yet. Leave wireless debugging on")
+    print("and run 'phone setup' once it does.")
+    return 0
+
+
+def cmd_setup(config):
+    """Write phone.conf from whatever is connected right now."""
+    devices = [d for d in get_devices() if d["state"] == "device" and not d["emulator"]]
+    if not devices:
+        discover_and_connect()
+        time.sleep(1)
+        devices = [
+            d for d in get_devices() if d["state"] == "device" and not d["emulator"]
+        ]
+    if not devices:
+        print("No handset connected. Run 'phone pair' first.")
+        return 1
+    if len(devices) > 1:
+        print("More than one handset is connected:")
+        for index, device in enumerate(devices, 1):
+            print(f"  {index}. {device['serial']}  {device['desc']}")
+        try:
+            choice = int(input("which one? ").strip())
+            device = devices[choice - 1]
+        except (ValueError, IndexError, EOFError, KeyboardInterrupt):
+            print("Cancelled.")
+            return 1
+    else:
+        device = devices[0]
+
+    model = run(["adb", "-s", device["serial"], "shell", "getprop", "ro.product.model"])
+    brand = run(["adb", "-s", device["serial"], "shell", "getprop", "ro.product.brand"])
+    name = " ".join(part for part in (brand.title(), model) if part) or "Phone"
+
+    # Match on the model reported in `adb devices -l`, which survives the
+    # address changing, rather than on the current serial.
+    model_tag = ""
+    for field in device["desc"].split():
+        if field.startswith("model:"):
+            model_tag = field.split(":", 1)[1]
+    terms = " ".join(dict.fromkeys(t for t in (model_tag, brand, model) if t))
+
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    with open(CONFIG_PATH, "w") as handle:
+        handle.write(
+            "# Written by `phone setup`. Hand-edit freely.\n"
+            "#\n"
+            "# name          window title, notification name, and what the\n"
+            "#               shell's quick toggle matches its window on\n"
+            "# match         substrings identifying the handset in\n"
+            "#               `adb devices -l`; empty means the only one connected\n"
+            "# serial        pin an exact adb serial when several are paired\n"
+            f"name = {name}\n"
+            f"match = {terms}\n"
+            "serial =\n"
+            f"max_size = {config['max_size']}\n"
+            f"video_bitrate = {config['video_bitrate']}\n"
+            f"max_fps = {config['max_fps']}\n"
+        )
+    print(f"\nWrote {CONFIG_PATH}:\n  name  = {name}\n  match = {terms}")
+    print("\nThe quick toggle will pick it up on the shell's next start.")
+    return 0
+
+
+def cmd_mirror(config, configured, passthrough):
+    config, settings = apply_plugin_settings(config)
+    if not configured:
+        notify(
+            config,
+            "No handset configured",
+            f"Run `phone pair` in a terminal, or see {CONFIG_PATH}",
+            "critical",
+        )
+        print(f"No {CONFIG_PATH}. Run `phone pair` (or `phone setup`).", file=sys.stderr)
+        return 2
+
+    target = find_target(config)
+    if not target:
+        message = (
+            f"Could not find {config['name']}. "
+            "Check that 'Wireless debugging' is on in Developer options."
+        )
+        notify(config, f"{config['name']} - not found", message, "critical")
+        print(f"\n[ERROR] {message}\n", file=sys.stderr)
+        return 1
+
+    cmd = [
+        "scrcpy",
+        f"--serial={target}",
+        # The shell's quick toggle finds the running mirror by this title, and
+        # the Hyprland float rule matches the scrcpy class beside it.
+        f"--window-title={config['name']}",
+        f"--max-size={config['max_size']}",
+        f"--video-bit-rate={config['video_bitrate']}",
+        f"--max-fps={config['max_fps']}",
+    ]
+    if settings.get("stayAwake", True):
+        cmd.append("--stay-awake")
+    if settings.get("screenOff", False):
+        cmd.append("--turn-screen-off")
+    cmd.extend(passthrough)
+    os.execvp("scrcpy", cmd)
+
+
+def main():
+    config, configured = load_config()
+    args = sys.argv[1:]
+    # Bare words are subcommands; anything with a leading dash belongs to scrcpy.
+    if args and not args[0].startswith("-"):
+        command, rest = args[0], args[1:]
+        if command == "status":
+            return cmd_status(config, configured)
+        if command == "pair":
+            return cmd_pair(config)
+        if command == "setup":
+            return cmd_setup(config)
+        if command == "mirror":
+            return cmd_mirror(config, configured, rest)
+        print(__doc__, file=sys.stderr)
+        return 2
+    return cmd_mirror(config, configured, args)
+
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)
