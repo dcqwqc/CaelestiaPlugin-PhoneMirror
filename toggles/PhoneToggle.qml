@@ -1,31 +1,113 @@
 import QtQuick
-import qs.components.controls
+import Caelestia.Config
+import qs.components
 import qs.services
 import dcqwqc.phonemirror.services as PhoneMirror
 
-// Quick toggle for the scrcpy mirror.
+// One quick-toggle slot for the whole PhoneMirror feature.
 //
-// The shell's built-in toggles borrow a private `Toggle` component inside
-// Toggles.qml; a plugin cannot reach that, so the shape properties the loader
-// reads -- fillWidth, shapeMorph -- are set here.
-IconButton {
-    // No handset configured yet: offer the pairing workflow rather than
-    // pretending to be a switch over nothing.
-    // The shell used to special-case this id in its toggle filter. A
-    // plugin answers for itself: no launcher on this machine, no toggle.
+// Off: one normal phone button.
+// Running: the same slot splits in half. The left half disconnects the mirror;
+// the right half toggles the click-through PIN guide. Keeping both actions in
+// one surface prevents a hidden PIN-guide toggle from leaving a blank slot.
+StyledRect {
+    id: root
+
+    property bool fillWidth: true
+    property bool shapeMorph: true
+    property real shapeMorphExpansion: 0
+
+    implicitWidth: implicitHeight
+    implicitHeight: primaryIcon.implicitHeight + Tokens.padding.small * 2
     visible: PhoneMirror.Phone.available
-    icon: PhoneMirror.Phone.configured ? "smartphone" : "phonelink_setup"
-    checked: PhoneMirror.Phone.running || PhoneMirror.Phone.connecting
-    isToggle: PhoneMirror.Phone.configured
-    onClicked: PhoneMirror.Phone.toggle()
 
-    inactiveColour: Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
-    fillWidth: true
-    isRound: true
-    shapeMorph: true
+    readonly property bool active: PhoneMirror.Phone.running || PhoneMirror.Phone.connecting
+    readonly property bool split: PhoneMirror.Phone.running
+    readonly property real primaryWidth: split ? Math.round(width / 2) : width
+    readonly property color activeColour: Colours.palette.m3primary
+    readonly property color activeOnColour: Colours.palette.m3onPrimary
+    readonly property color inactiveColour: Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
+    readonly property color inactiveOnColour: Colours.palette.m3onSurfaceVariant
 
-    // Pairing happens in a terminal outside the shell, so re-read who the
-    // handset is whenever this comes back on screen.
+    radius: split || primaryLayer.pressed || pinLayer.pressed
+        ? Tokens.rounding.medium
+        : Math.min(width, height) / 2 * Math.min(1, Tokens.rounding.scale)
+    color: active ? activeColour : inactiveColour
+
+    Item {
+        id: primaryAction
+
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: root.primaryWidth
+
+        StateLayer {
+            id: primaryLayer
+
+            color: root.active ? root.activeOnColour : root.inactiveOnColour
+            rect.topLeftRadius: root.radius
+            rect.bottomLeftRadius: root.radius
+            rect.topRightRadius: root.split ? 0 : root.radius
+            rect.bottomRightRadius: root.split ? 0 : root.radius
+            onClicked: PhoneMirror.Phone.toggle()
+        }
+
+        MaterialIcon {
+            id: primaryIcon
+
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 1
+            text: !PhoneMirror.Phone.configured
+                ? "phonelink_setup"
+                : (root.split ? "power_settings_new" : "smartphone")
+            color: root.active ? root.activeOnColour : root.inactiveOnColour
+            fill: root.active ? 1 : 0
+            fontStyle: Tokens.font.icon.medium
+        }
+    }
+
+    Item {
+        id: pinAction
+
+        visible: root.split
+        anchors.left: primaryAction.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+
+        StateLayer {
+            id: pinLayer
+
+            color: root.activeOnColour
+            rect.topRightRadius: root.radius
+            rect.bottomRightRadius: root.radius
+            onClicked: PhoneMirror.Phone.togglePinGuide()
+        }
+
+        MaterialIcon {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 1
+            text: "dialpad"
+            color: root.activeOnColour
+            fill: PhoneMirror.Phone.pinGuideVisible ? 1 : 0
+            opacity: PhoneMirror.Phone.pinGuideVisible ? 1 : 0.82
+            fontStyle: Tokens.font.icon.medium
+        }
+    }
+
+    Rectangle {
+        visible: root.split
+        anchors.left: primaryAction.right
+        anchors.verticalCenter: parent.verticalCenter
+        width: 1
+        height: Math.round(parent.height * 0.42)
+        color: root.activeOnColour
+        opacity: 0.32
+    }
+
+    Behavior on radius { Anim { type: Anim.FastSpatial } }
+
     onVisibleChanged: if (visible)
         PhoneMirror.Phone.refresh()
 }
