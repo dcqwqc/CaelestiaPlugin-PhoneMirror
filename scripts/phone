@@ -11,6 +11,7 @@ particular model.
     phone connect        reconnect the configured handset without launching scrcpy
     phone status         machine-readable state, for the shell's quick toggle
     phone input-key KEY  send one PIN digit/backspace to the connected handset
+    phone fullscreen MODE toggle immersive mirror view (on/off/toggle/status)
 
 Anything starting with '-' is passed straight through to scrcpy, which is what
 phone-low and phone-off rely on.
@@ -356,6 +357,74 @@ def cmd_input_key(config, configured, key):
     return result.returncode
 
 
+
+def _hypr_phone_client(config):
+    try:
+        result = subprocess.run(
+            ["hyprctl", "clients", "-j"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        clients = json.loads(result.stdout or "[]")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    for client in clients:
+        if client.get("title") == config["name"]:
+            return client
+    return None
+
+
+def cmd_fullscreen(config, configured, mode):
+    if not configured:
+        return 2
+    client = _hypr_phone_client(config)
+    if not client:
+        return 1
+
+    current = int(client.get("fullscreen") or 0) > 1
+    mode = (mode or "toggle").strip().lower()
+    if mode == "status":
+        print("on" if current else "off")
+        return 0
+    if mode == "toggle":
+        desired = not current
+    elif mode in ("on", "1", "true"):
+        desired = True
+    elif mode in ("off", "0", "false"):
+        desired = False
+    else:
+        print("fullscreen mode must be on, off, toggle, or status", file=sys.stderr)
+        return 2
+
+    if desired == current:
+        return 0
+
+    address = str(client.get("address") or "").strip()
+    if not address:
+        return 1
+
+    focused = subprocess.run(
+        ["hyprctl", "dispatch", "focuswindow", f"address:{address}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=2,
+        check=False,
+    )
+    if focused.returncode != 0:
+        return focused.returncode
+
+    changed = subprocess.run(
+        ["hyprctl", "dispatch", "fullscreen", "0"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=2,
+        check=False,
+    )
+    return changed.returncode
+
+
 def cmd_pair(config):
     """Android 11+ wireless debugging: a one-time pairing, then mDNS forever."""
     print(f"Pairing a handset with {os.uname().nodename}.\n")
@@ -507,6 +576,8 @@ def main():
             return cmd_connect(config, configured)
         if command == "input-key":
             return cmd_input_key(config, configured, rest[0] if rest else "")
+        if command == "fullscreen":
+            return cmd_fullscreen(config, configured, rest[0] if rest else "toggle")
         if command == "pair":
             return cmd_pair(config)
         if command == "setup":

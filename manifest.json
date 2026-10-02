@@ -1,20 +1,31 @@
 {
   "name": "PhoneMirror",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "author": "dcqwqc",
   "homepage": "https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror",
   "icon": "smartphone",
-  "description": "Mirror Android with a split quick toggle and a minimal transparent PIN guide with masked preview.",
+  "description": "Mirror Android with integrated quick toggles, PIN guide, and an immersive fullscreen phone view.",
   "entryPoints": [
     {
       "type": "custom",
       "source": "overlay/PinGuide.qml"
     },
     {
+      "type": "custom",
+      "source": "overlay/FullscreenExit.qml"
+    },
+    {
       "type": "quick-toggle",
       "source": "toggles/PhoneToggle.qml",
       "properties": {
         "name": "phone"
+      }
+    },
+    {
+      "type": "quick-toggle",
+      "source": "toggles/FullscreenToggle.qml",
+      "properties": {
+        "name": "phoneFullscreen"
       }
     }
   ],

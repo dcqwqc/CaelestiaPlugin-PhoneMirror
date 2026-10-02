@@ -2,9 +2,11 @@ pragma Singleton
 
 import QtQuick
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import Caelestia
+import qs.services
 
 // The scrcpy mirror of the handset, as a quick toggle.
 //
@@ -51,6 +53,16 @@ Singleton {
     }
     readonly property bool running: !!toplevel
 
+    // Observe the real compositor state so the toggle also follows fullscreen
+    // changes made outside this plugin.
+    readonly property HyprlandToplevel hyprToplevel: {
+        if (!root.windowTitle)
+            return null;
+        return Hypr.toplevels.values.find(t => t.title === root.windowTitle) ?? null;
+    }
+    readonly property bool fullscreenActive:
+        Number(hyprToplevel?.lastIpcObject?.fullscreen ?? 0) > 1
+
     // The launcher browses mDNS for the handset before scrcpy ever starts,
     // which takes a few seconds; hold the toggle on for that window so it does
     // not snap back under the cursor.
@@ -84,6 +96,18 @@ Singleton {
             return;
         }
         root.pinGuideVisible = !root.pinGuideVisible;
+    }
+
+    function setFullscreen(enabled: bool): void {
+        if (!root.running)
+            return;
+        if (enabled)
+            root.pinGuideVisible = false;
+        Quickshell.execDetached([root.bin, "fullscreen", enabled ? "on" : "off"]);
+    }
+
+    function toggleFullscreen(): void {
+        root.setFullscreen(!root.fullscreenActive);
     }
 
     onRunningChanged: {
