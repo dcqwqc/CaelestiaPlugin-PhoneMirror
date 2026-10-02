@@ -1,10 +1,10 @@
 {
   "name": "PhoneMirror",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": "dcqwqc",
   "homepage": "https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror",
   "icon": "smartphone",
-  "description": "Mirror Android with a split quick toggle and an interactive Caelestia-styled PIN guide with ephemeral preview.",
+  "description": "Mirror Android with a split quick toggle and a minimal transparent PIN guide with masked preview.",
   "entryPoints": [
     {
       "type": "custom",

@@ -12,15 +12,19 @@ Item {
     id: root
 
     property var settings: null
-    property string pinPreview: ""
+    property int pinLength: 0
     readonly property real yOffsetRatio: Math.max(-0.30, Math.min(0.12, Number(settings?.pinGuideYOffsetPercent ?? 0) / 100))
 
     function pressKey(key: string): void {
+        if (key === "hide") {
+            root.pinLength = 0;
+            PhoneMirror.Phone.togglePinGuide();
+            return;
+        }
         if (key === "backspace") {
-            if (pinPreview.length > 0)
-                pinPreview = pinPreview.slice(0, -1);
+            root.pinLength = Math.max(0, root.pinLength - 1);
         } else if (/^[0-9]$/.test(key)) {
-            pinPreview += key;
+            root.pinLength = Math.min(16, root.pinLength + 1);
         }
         PhoneMirror.Phone.sendPinKey(key);
     }
@@ -29,7 +33,7 @@ Item {
         target: PhoneMirror.Phone
         function onPinGuideVisibleChanged(): void {
             if (!PhoneMirror.Phone.pinGuideVisible)
-                root.pinPreview = "";
+                root.pinLength = 0;
         }
     }
 
@@ -100,9 +104,9 @@ Item {
                 Item {
                     id: guide
 
-                    readonly property real usableWidth: Math.min(parent.width * 0.76, parent.height * 0.42)
+                    readonly property real usableWidth: Math.min(parent.width * 0.70, parent.height * 0.36)
                     readonly property real cell: usableWidth / 3
-                    readonly property real circle: Math.min(cell * 0.64, parent.height * 0.09)
+                    readonly property real circle: Math.min(cell * 0.54, parent.height * 0.072)
 
                     width: usableWidth
                     height: cell * 4
@@ -121,7 +125,7 @@ Item {
                             "1", "2", "3",
                             "4", "5", "6",
                             "7", "8", "9",
-                            "",  "0", "backspace"
+                            "hide", "0", "backspace"
                         ]
 
                         delegate: Item {
@@ -132,20 +136,20 @@ Item {
                             y: Math.floor(index / 3) * guide.cell
                             width: guide.cell
                             height: guide.cell
-                            visible: modelData !== ""
+                            visible: true
 
-                            StyledRect {
+                            Rectangle {
                                 id: keyCap
 
                                 anchors.centerIn: parent
                                 width: guide.circle
                                 height: guide.circle
                                 radius: width / 2
-                                color: Colours.palette.m3surface
-                                border.width: 1
-                                border.color: Colours.palette.m3outlineVariant
-                                scale: keyArea.pressed ? 0.90 : 1
-                                opacity: keyArea.pressed ? 0.82 : 1
+                                color: "transparent"
+                                border.width: Math.max(1, width * 0.012)
+                                border.color: "#E8FFFFFF"
+                                scale: keyArea.pressed ? 0.93 : 1
+                                opacity: keyArea.pressed ? 0.68 : 1
 
                                 Behavior on scale { Anim { type: Anim.FastSpatial } }
                                 Behavior on opacity { Anim { type: Anim.Fast } }
@@ -153,19 +157,23 @@ Item {
 
                             MaterialIcon {
                                 anchors.centerIn: parent
-                                visible: modelData === "backspace"
-                                text: "backspace"
-                                color: Colours.palette.m3onSurface
-                                fontStyle: Tokens.font.icon.medium
+                                visible: modelData === "backspace" || modelData === "hide"
+                                text: modelData === "hide" ? "visibility_off" : "backspace"
+                                color: "#F5FFFFFF"
+                                fontStyle: Tokens.font.icon.small
+                                scale: keyArea.pressed ? 0.92 : 1
+                                Behavior on scale { Anim { type: Anim.FastSpatial } }
                             }
 
-                            StyledText {
+                            Text {
                                 anchors.centerIn: parent
-                                visible: modelData !== "backspace"
+                                visible: modelData !== "backspace" && modelData !== "hide"
                                 text: modelData
-                                color: Colours.palette.m3onSurface
-                                font.pixelSize: Math.max(18, guide.circle * 0.34)
+                                color: "#FFFFFFFF"
+                                font.pixelSize: Math.max(17, guide.circle * 0.30)
                                 font.weight: Font.Medium
+                                scale: keyArea.pressed ? 0.92 : 1
+                                Behavior on scale { Anim { type: Anim.FastSpatial } }
                             }
 
                             MouseArea {
@@ -178,27 +186,36 @@ Item {
                     }
                 }
 
-                StyledRect {
+                Item {
                     id: preview
 
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: Math.max(14, Math.min(
                         parent.height - height - 14,
-                        parent.height * 0.34 + parent.height * root.yOffsetRatio
+                        parent.height * 0.31 + parent.height * root.yOffsetRatio
                     ))
-                    width: Math.max(120, previewText.implicitWidth + 34)
-                    height: previewText.implicitHeight + 16
-                    radius: height / 2
-                    color: Colours.palette.m3surface
-                    border.width: 1
-                    border.color: Colours.palette.m3outlineVariant
+                    width: Math.max(title.implicitWidth, dots.implicitWidth) + 12
+                    height: title.implicitHeight + dots.implicitHeight + Tokens.spacing.small
 
-                    StyledText {
-                        id: previewText
-                        anchors.centerIn: parent
-                        text: root.pinPreview.length > 0 ? root.pinPreview : qsTr("PIN")
-                        color: Colours.palette.m3onSurface
-                        font: Tokens.font.body.medium
+                    Text {
+                        id: title
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        text: qsTr("Enter your PIN")
+                        color: "#F5FFFFFF"
+                        font.pixelSize: Math.max(12, Math.min(16, guideWindow.width * 0.027))
+                        font.weight: Font.Medium
+                    }
+
+                    Text {
+                        id: dots
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: title.bottom
+                        anchors.topMargin: Tokens.spacing.small
+                        text: root.pinLength > 0 ? Array(root.pinLength + 1).join("✦") : ""
+                        color: "#FFFFFFFF"
+                        font.pixelSize: Math.max(16, Math.min(22, guideWindow.width * 0.034))
+                        font.weight: Font.DemiBold
                     }
                 }
             }
