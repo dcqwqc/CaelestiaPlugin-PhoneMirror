@@ -60,6 +60,23 @@ Singleton {
     // Visual-only guide for Android's secure PIN surface. It is deliberately
     // manual and never stores, reads or submits the PIN.
     property bool pinGuideVisible: false
+    property var pinKeyQueue: []
+
+    function sendPinKey(key: string): void {
+        if (!root.running)
+            return;
+        root.pinKeyQueue = root.pinKeyQueue.concat([key]);
+        root.flushPinKeyQueue();
+    }
+
+    function flushPinKeyQueue(): void {
+        if (pinInput.running || root.pinKeyQueue.length === 0)
+            return;
+        const key = root.pinKeyQueue[0];
+        root.pinKeyQueue = root.pinKeyQueue.slice(1);
+        pinInput.command = [root.bin, "input-key", key];
+        pinInput.running = true;
+    }
 
     function togglePinGuide(): void {
         if (!root.running) {
@@ -70,8 +87,10 @@ Singleton {
     }
 
     onRunningChanged: {
-        if (!running)
+        if (!running) {
             pinGuideVisible = false;
+            pinKeyQueue = [];
+        }
 
         if (running) {
             connecting = false;
@@ -196,6 +215,13 @@ Singleton {
         id: killer
 
         command: ["pkill", "-f", `window-title=${root.windowTitle}`]
+    }
+
+    Process {
+        id: pinInput
+
+        running: false
+        onExited: root.flushPinKeyQueue()
     }
 
     // Only guards a start that never lands; it does not sample state.

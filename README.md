@@ -107,3 +107,7 @@ click-through PIN guide. The position is locked by default; tap the lock beside
 the slider to edit it, align the guide while it is visible, then lock it again.
 `0%` keeps the calibrated default, negative values move the overlay upward and
 positive values move it downward.
+
+## Interactive PIN guide
+
+While the guide is enabled, only the keypad region captures pointer input; the rest of the mirror remains click-through. Digit taps are sent directly to the already-connected Android handset, the preview exists only in memory, and backspace removes the last preview digit. Closing the guide clears the preview.

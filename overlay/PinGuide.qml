@@ -1,7 +1,9 @@
 import QtQuick
+import Caelestia.Config
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Wayland
+import qs.components
 import qs.services
 import qs.utils
 import dcqwqc.phonemirror.services as PhoneMirror
@@ -10,7 +12,26 @@ Item {
     id: root
 
     property var settings: null
+    property string pinPreview: ""
     readonly property real yOffsetRatio: Math.max(-0.30, Math.min(0.12, Number(settings?.pinGuideYOffsetPercent ?? 0) / 100))
+
+    function pressKey(key: string): void {
+        if (key === "backspace") {
+            if (pinPreview.length > 0)
+                pinPreview = pinPreview.slice(0, -1);
+        } else if (/^[0-9]$/.test(key)) {
+            pinPreview += key;
+        }
+        PhoneMirror.Phone.sendPinKey(key);
+    }
+
+    Connections {
+        target: PhoneMirror.Phone
+        function onPinGuideVisibleChanged(): void {
+            if (!PhoneMirror.Phone.pinGuideVisible)
+                root.pinPreview = "";
+        }
+    }
 
     width: 0
     height: 0
@@ -64,7 +85,12 @@ Item {
                 margins.left: Math.max(0, Number(scope.at[0] ?? 0) - (scope.monitor?.x ?? 0))
                 margins.top: Math.max(0, Number(scope.at[1] ?? 0) - (scope.monitor?.y ?? 0))
 
-                mask: Region {}
+                mask: Region {
+                    x: guide.x
+                    y: preview.y
+                    width: guide.width
+                    height: guide.y + guide.height - preview.y
+                }
 
                 WlrLayershell.exclusionMode: ExclusionMode.Ignore
                 WlrLayershell.layer: WlrLayer.Overlay
@@ -95,7 +121,7 @@ Item {
                             "1", "2", "3",
                             "4", "5", "6",
                             "7", "8", "9",
-                            "",  "0", "⌫"
+                            "",  "0", "backspace"
                         ]
 
                         delegate: Item {
@@ -108,49 +134,71 @@ Item {
                             height: guide.cell
                             visible: modelData !== ""
 
-                            Rectangle {
+                            StyledRect {
+                                id: keyCap
+
                                 anchors.centerIn: parent
                                 width: guide.circle
                                 height: guide.circle
                                 radius: width / 2
-                                color: "#26000000"
-                                border.width: Math.max(1, width * 0.018)
-                                border.color: "#A8FFFFFF"
+                                color: Colours.palette.m3surface
+                                border.width: 1
+                                border.color: Colours.palette.m3outlineVariant
+                                scale: keyArea.pressed ? 0.90 : 1
+                                opacity: keyArea.pressed ? 0.82 : 1
+
+                                Behavior on scale { Anim { type: Anim.FastSpatial } }
+                                Behavior on opacity { Anim { type: Anim.Fast } }
                             }
 
-                            Text {
+                            MaterialIcon {
                                 anchors.centerIn: parent
+                                visible: modelData === "backspace"
+                                text: "backspace"
+                                color: Colours.palette.m3onSurface
+                                fontStyle: Tokens.font.icon.medium
+                            }
+
+                            StyledText {
+                                anchors.centerIn: parent
+                                visible: modelData !== "backspace"
                                 text: modelData
-                                color: "#F2FFFFFF"
-                                font.pixelSize: modelData === "⌫"
-                                    ? Math.max(16, guide.circle * 0.28)
-                                    : Math.max(18, guide.circle * 0.34)
+                                color: Colours.palette.m3onSurface
+                                font.pixelSize: Math.max(18, guide.circle * 0.34)
                                 font.weight: Font.Medium
+                            }
+
+                            MouseArea {
+                                id: keyArea
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.pressKey(modelData)
                             }
                         }
                     }
                 }
 
-                Rectangle {
+                StyledRect {
+                    id: preview
+
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: Math.max(14, Math.min(
                         parent.height - height - 14,
                         parent.height * 0.34 + parent.height * root.yOffsetRatio
                     ))
-                    width: label.implicitWidth + 24
-                    height: label.implicitHeight + 10
+                    width: Math.max(120, previewText.implicitWidth + 34)
+                    height: previewText.implicitHeight + 16
                     radius: height / 2
-                    color: "#52000000"
+                    color: Colours.palette.m3surface
                     border.width: 1
-                    border.color: "#66FFFFFF"
+                    border.color: Colours.palette.m3outlineVariant
 
-                    Text {
-                        id: label
+                    StyledText {
+                        id: previewText
                         anchors.centerIn: parent
-                        text: qsTr("PIN GUIDE · click-through")
-                        color: "#DFFFFFFF"
-                        font.pixelSize: Math.max(10, Math.min(14, guideWindow.width * 0.025))
-                        font.weight: Font.Medium
+                        text: root.pinPreview.length > 0 ? root.pinPreview : qsTr("PIN")
+                        color: Colours.palette.m3onSurface
+                        font: Tokens.font.body.medium
                     }
                 }
             }

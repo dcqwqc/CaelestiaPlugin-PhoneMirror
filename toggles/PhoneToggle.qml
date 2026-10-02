@@ -21,8 +21,8 @@ StyledRect {
     implicitHeight: primaryIcon.implicitHeight + Tokens.padding.small * 2
     visible: PhoneMirror.Phone.available
 
-    readonly property bool active: PhoneMirror.Phone.running || PhoneMirror.Phone.connecting
     readonly property bool split: PhoneMirror.Phone.running
+    readonly property bool overlayActive: split && PhoneMirror.Phone.pinGuideVisible
     readonly property real primaryWidth: split ? Math.round(width / 2) : width
     readonly property color activeColour: Colours.palette.m3primary
     readonly property color activeOnColour: Colours.palette.m3onPrimary
@@ -32,7 +32,30 @@ StyledRect {
     radius: split || primaryLayer.pressed || pinLayer.pressed
         ? Tokens.rounding.medium
         : Math.min(width, height) / 2 * Math.min(1, Tokens.rounding.scale)
-    color: active ? activeColour : inactiveColour
+    color: "transparent"
+
+    StyledRect {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: root.primaryWidth
+        radius: root.radius
+        topRightRadius: root.split ? 0 : root.radius
+        bottomRightRadius: root.split ? 0 : root.radius
+        color: root.split ? root.activeColour : root.inactiveColour
+    }
+
+    StyledRect {
+        visible: root.split
+        anchors.left: primaryAction.right
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        radius: root.radius
+        topLeftRadius: 0
+        bottomLeftRadius: 0
+        color: root.overlayActive ? root.activeColour : root.inactiveColour
+    }
 
     Item {
         id: primaryAction
@@ -45,7 +68,7 @@ StyledRect {
         StateLayer {
             id: primaryLayer
 
-            color: root.active ? root.activeOnColour : root.inactiveOnColour
+            color: root.split ? root.activeOnColour : root.inactiveOnColour
             rect.topLeftRadius: root.radius
             rect.bottomLeftRadius: root.radius
             rect.topRightRadius: root.split ? 0 : root.radius
@@ -61,8 +84,8 @@ StyledRect {
             text: !PhoneMirror.Phone.configured
                 ? "phonelink_setup"
                 : (root.split ? "power_settings_new" : "smartphone")
-            color: root.active ? root.activeOnColour : root.inactiveOnColour
-            fill: root.active ? 1 : 0
+            color: root.split ? root.activeOnColour : root.inactiveOnColour
+            fill: root.split ? 1 : 0
             fontStyle: Tokens.font.icon.medium
         }
     }
@@ -79,7 +102,7 @@ StyledRect {
         StateLayer {
             id: pinLayer
 
-            color: root.activeOnColour
+            color: root.overlayActive ? root.activeOnColour : root.inactiveOnColour
             rect.topRightRadius: root.radius
             rect.bottomRightRadius: root.radius
             onClicked: PhoneMirror.Phone.togglePinGuide()
@@ -89,9 +112,9 @@ StyledRect {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
             text: "dialpad"
-            color: root.activeOnColour
-            fill: PhoneMirror.Phone.pinGuideVisible ? 1 : 0
-            opacity: PhoneMirror.Phone.pinGuideVisible ? 1 : 0.82
+            color: root.overlayActive ? root.activeOnColour : root.inactiveOnColour
+            fill: root.overlayActive ? 1 : 0
+            opacity: 1
             fontStyle: Tokens.font.icon.medium
         }
     }
@@ -102,8 +125,8 @@ StyledRect {
         anchors.verticalCenter: parent.verticalCenter
         width: 1
         height: Math.round(parent.height * 0.42)
-        color: root.activeOnColour
-        opacity: 0.32
+        color: Colours.palette.m3outline
+        opacity: 0.42
     }
 
     Behavior on radius { Anim { type: Anim.FastSpatial } }
