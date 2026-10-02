@@ -57,7 +57,22 @@ Singleton {
     property bool connecting: false
     property string pendingAction: ""
 
+    // Visual-only guide for Android's secure PIN surface. It is deliberately
+    // manual and never stores, reads or submits the PIN.
+    property bool pinGuideVisible: false
+
+    function togglePinGuide(): void {
+        if (!root.running) {
+            root.pinGuideVisible = false;
+            return;
+        }
+        root.pinGuideVisible = !root.pinGuideVisible;
+    }
+
     onRunningChanged: {
+        if (!running)
+            pinGuideVisible = false;
+
         if (running) {
             connecting = false;
             if (pendingAction === "start") {

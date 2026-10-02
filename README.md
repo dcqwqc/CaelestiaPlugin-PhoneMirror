@@ -18,6 +18,30 @@ For the preferred remote transport, the phone runs Termux SSH over Tailscale and
 provides `adb-mdns-discover` from
 [android-adb-helpers](https://github.com/rebroad/android-adb-helpers).
 
+## Connection order
+
+PhoneMirror prefers the simplest available transport automatically:
+
+1. **USB ADB** when the handset is plugged into Mirai. USB always wins, even if
+   an older wireless ADB endpoint is still connected.
+2. **Tailscale + native Wireless Debugging** using the phone-side SSH discovery
+   helper.
+3. **LAN mDNS Wireless Debugging** as the final `auto` fallback.
+
+Wireless Debugging requires Android to be connected to Wi-Fi; USB mirroring does
+not, so PhoneMirror continues to work while the handset is cellular-only.
+
+## Secure PIN guide
+
+Android may intentionally black out the secure PIN surface in scrcpy. PhoneMirror
+includes a visual-only PIN guide for that case:
+
+- enable the dialpad quick toggle while the mirror is open;
+- a transparent keypad guide follows the scrcpy window;
+- its input region is empty, so clicks and touch pass directly through to scrcpy;
+- it never stores, reads, or automatically submits a PIN;
+- it hides automatically when the mirror closes.
+
 ## Setup
 
     phone pair     # Android 11+ native Wireless Debugging pairing

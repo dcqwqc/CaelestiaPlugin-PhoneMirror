@@ -1,15 +1,28 @@
 {
   "name": "PhoneMirror",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "dcqwqc",
   "homepage": "https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror",
   "icon": "smartphone",
-  "description": "Mirror Android over native Wireless Debugging, with Tailscale SSH port discovery and LAN mDNS fallback.",
+  "description": "Mirror Android over USB first, with secure Tailscale/Wireless Debugging fallback and a click-through PIN guide.",
   "entryPoints": [
+    {
+      "type": "custom",
+      "source": "overlay/PinGuide.qml"
+    },
     {
       "type": "quick-toggle",
       "source": "toggles/PhoneToggle.qml",
-      "properties": { "name": "phone" }
+      "properties": {
+        "name": "phone"
+      }
+    },
+    {
+      "type": "quick-toggle",
+      "source": "toggles/PinGuideToggle.qml",
+      "properties": {
+        "name": "phonePinGuide"
+      }
     }
   ],
   "settings": "Settings.qml"
