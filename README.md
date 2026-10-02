@@ -13,15 +13,31 @@ to be a switch over nothing.
 
 ## Requires
 
-`scrcpy`, `android-tools`, `avahi` (for mDNS discovery), and the `phone` helper
-from [kagami](https://github.com/dcqwqc/kagami) on `PATH` or in `~/.local/bin`.
+`scrcpy` and `android-tools`. `avahi` is only needed for local-LAN mDNS fallback.
+For the preferred remote transport, the phone runs Termux SSH over Tailscale and
+provides `adb-mdns-discover` from
+[android-adb-helpers](https://github.com/rebroad/android-adb-helpers).
 
 ## Setup
 
-    phone pair     # Android 11+ wireless debugging: address, code, done
-    phone setup    # writes ~/.config/kagami/phone.conf from a connected handset
+    phone pair     # Android 11+ native Wireless Debugging pairing
+    phone setup    # records the connected handset
+    phone connect  # reconnect without opening scrcpy
 
-`phone.conf` holds the handset's *identity* — which phone, how to recognise it
+For the preferred remote setup, configure the handset's
+`~/.config/caelestia/phone-mirror/device.conf` with:
+
+    transport = tailscale
+    tailscale_ip = 100.x.y.z
+    ssh_host = phone-ssh-alias
+
+The SSH alias should point at Termux on the handset over Tailscale. PhoneMirror
+asks `adb-mdns-discover` on the handset for Android's current random
+`_adb-tls-connect._tcp` port and then connects Android's native paired/TLS
+Wireless Debugging endpoint through Tailscale. It does not use a fixed legacy
+`adb tcpip 5555` listener.
+
+`device.conf` holds the handset's *identity* — which phone, how to recognise it
 in `adb devices -l`, optionally an exact serial. It is per-machine and stays out
 of the settings UI on purpose.
 

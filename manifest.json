@@ -1,10 +1,10 @@
 {
   "name": "PhoneMirror",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "dcqwqc",
   "homepage": "https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror",
   "icon": "smartphone",
-  "description": "Mirror an Android handset over wireless ADB from a quick toggle, with a guided pairing flow.",
+  "description": "Mirror Android over native Wireless Debugging, with Tailscale SSH port discovery and LAN mDNS fallback.",
   "entryPoints": [
     {
       "type": "quick-toggle",

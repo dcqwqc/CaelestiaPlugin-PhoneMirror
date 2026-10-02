@@ -8,6 +8,7 @@ particular model.
     phone                mirror the configured handset (default)
     phone pair           pair a new handset over wireless debugging
     phone setup          write phone.conf from a handset that is connected now
+    phone connect        reconnect the configured handset without launching scrcpy
     phone status         machine-readable state, for the shell's quick toggle
 
 Anything starting with '-' is passed straight through to scrcpy, which is what
@@ -45,6 +46,12 @@ DEFAULTS = {
     "match": "",
     # An exact adb serial pins one handset when several are paired.
     "serial": "",
+    # "tailscale" asks a helper on the phone for Android's current random
+    # native Wireless Debugging TLS port over SSH, then connects ADB to that
+    # port through the phone's Tailscale IP. "mdns" is LAN-only.
+    "transport": "auto",
+    "tailscale_ip": "",
+    "ssh_host": "",
     "max_size": "1440",
     "video_bitrate": "16M",
     "max_fps": "120",
@@ -185,6 +192,40 @@ def select_target(devices, config):
     return None
 
 
+def discover_tailscale_and_connect(config):
+    """Discover Android's current ADB TLS port on the phone, over SSH."""
+    tailscale_ip = config.get("tailscale_ip", "").strip()
+    ssh_host = config.get("ssh_host", "").strip()
+    if not tailscale_ip or not ssh_host:
+        return None
+
+    out = run(
+        [
+            "ssh",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=4",
+            ssh_host,
+            'PATH="$HOME/bin:$PATH" adb-mdns-discover',
+        ],
+        timeout=8,
+    )
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 3 or parts[0] != "connect":
+            continue
+        try:
+            port = int(parts[2])
+        except ValueError:
+            continue
+        if not 1 <= port <= 65535:
+            continue
+        endpoint = f"{tailscale_ip}:{port}"
+        result = run(["adb", "connect", endpoint], timeout=5).lower()
+        if "connected to" in result or "already connected to" in result:
+            return endpoint
+    return None
+
+
 def discover_and_connect():
     """Find handsets advertising wireless debugging over mDNS and connect."""
     try:
@@ -211,15 +252,42 @@ def find_target(config, announce=True):
     target = select_target(get_devices(), config)
     if target:
         return target
+
+    transport = config.get("transport", "auto").strip().lower() or "auto"
     if announce:
-        notify(config, config["name"], "Connecting over Wi-Fi...", "low")
-    discover_and_connect()
-    for _ in range(4):
-        time.sleep(0.5)
-        target = select_target(get_devices(), config)
-        if target:
-            return target
+        label = "Tailscale" if transport == "tailscale" else "wireless ADB"
+        notify(config, config["name"], f"Connecting over {label}...", "low")
+
+    if transport in ("auto", "tailscale"):
+        discover_tailscale_and_connect(config)
+        for _ in range(4):
+            time.sleep(0.35)
+            target = select_target(get_devices(), config)
+            if target:
+                return target
+        if transport == "tailscale":
+            return None
+
+    if transport in ("auto", "mdns"):
+        discover_and_connect()
+        for _ in range(4):
+            time.sleep(0.5)
+            target = select_target(get_devices(), config)
+            if target:
+                return target
     return None
+
+
+def cmd_connect(config, configured):
+    if not configured:
+        print(f"No {CONFIG_PATH}. Run `phone pair` (or `phone setup`).", file=sys.stderr)
+        return 2
+    target = find_target(config)
+    if not target:
+        print(f"Could not connect {config['name']}.", file=sys.stderr)
+        return 1
+    print(target)
+    return 0
 
 
 def cmd_status(config, configured):
@@ -231,6 +299,9 @@ def cmd_status(config, configured):
             "title": config["name"],
             "connected": bool(target),
             "serial": target or "",
+            "transport": config.get("transport", "auto"),
+            "tailscale_ip": config.get("tailscale_ip", ""),
+            "ssh_host": config.get("ssh_host", ""),
             "config": CONFIG_PATH,
         },
         sys.stdout,
@@ -326,6 +397,9 @@ def cmd_setup(config):
             f"name = {name}\n"
             f"match = {terms}\n"
             "serial =\n"
+            f"transport = {config.get('transport', 'auto')}\n"
+            f"tailscale_ip = {config.get('tailscale_ip', '')}\n"
+            f"ssh_host = {config.get('ssh_host', '')}\n"
             f"max_size = {config['max_size']}\n"
             f"video_bitrate = {config['video_bitrate']}\n"
             f"max_fps = {config['max_fps']}\n"
@@ -351,7 +425,7 @@ def cmd_mirror(config, configured, passthrough):
     if not target:
         message = (
             f"Could not find {config['name']}. "
-            "Check that 'Wireless debugging' is on in Developer options."
+            "Check native Wireless debugging and the configured transport."
         )
         notify(config, f"{config['name']} - not found", message, "critical")
         print(f"\n[ERROR] {message}\n", file=sys.stderr)
@@ -383,6 +457,8 @@ def main():
         command, rest = args[0], args[1:]
         if command == "status":
             return cmd_status(config, configured)
+        if command == "connect":
+            return cmd_connect(config, configured)
         if command == "pair":
             return cmd_pair(config)
         if command == "setup":
