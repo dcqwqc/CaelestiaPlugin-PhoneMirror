@@ -26,8 +26,14 @@ StyledRect {
     readonly property real primaryWidth: split ? Math.round(width / 2) : width
     readonly property color activeColour: Colours.palette.m3primary
     readonly property color activeOnColour: Colours.palette.m3onPrimary
-    readonly property color inactiveColour: Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
-    readonly property color inactiveOnColour: Colours.palette.m3onSurfaceVariant
+    // Keep inactive unmistakably neutral. Dynamic Material palettes can tint
+    // surface containers green enough that "off" reads like "on".
+    readonly property color inactiveColour: Colours.light
+        ? Qt.rgba(0.78, 0.78, 0.80, 1)
+        : Qt.rgba(0.29, 0.29, 0.31, 1)
+    readonly property color inactiveOnColour: Colours.light
+        ? Qt.rgba(0.16, 0.16, 0.18, 1)
+        : Qt.rgba(0.93, 0.93, 0.95, 1)
 
     radius: split || primaryLayer.pressed || pinLayer.pressed
         ? Tokens.rounding.medium
