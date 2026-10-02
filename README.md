@@ -99,3 +99,11 @@ Or clone anywhere and add the parent to `path` in
 ## Licence
 
 GPL-3.0-or-later, matching Caelestia.
+
+## PIN guide vertical alignment
+
+PhoneMirror's plugin settings include a live **Y position** control for the
+click-through PIN guide. The position is locked by default; tap the lock beside
+the slider to edit it, align the guide while it is visible, then lock it again.
+`0%` keeps the calibrated default, negative values move the overlay upward and
+positive values move it downward.

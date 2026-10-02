@@ -56,4 +56,25 @@ SettingsObject {
         icon: "bedtime_off"
         inputType: SettingMeta.Switch
     }
+
+    // PIN guide alignment. The position control is intentionally locked by
+    // default so an accidental swipe in plugin settings cannot move the guide.
+    property int pinGuideYOffsetPercent: 0
+    SettingMeta on pinGuideYOffsetPercent {
+        label: "PIN guide Y offset"
+        description: "Vertical offset of the click-through PIN guide relative to its calibrated position."
+        icon: "vertical_align_center"
+        inputType: SettingMeta.Slider
+        min: -30
+        max: 12
+        step: 1
+    }
+
+    property bool pinGuidePositionLocked: true
+    SettingMeta on pinGuidePositionLocked {
+        label: "Lock PIN guide position"
+        description: "Prevents accidental position changes in plugin settings."
+        icon: "lock"
+        inputType: SettingMeta.Switch
+    }
 }

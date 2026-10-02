@@ -9,6 +9,9 @@ import dcqwqc.phonemirror.services as PhoneMirror
 Item {
     id: root
 
+    property var settings: null
+    readonly property real yOffsetRatio: Math.max(-0.30, Math.min(0.12, Number(settings?.pinGuideYOffsetPercent ?? 0) / 100))
+
     width: 0
     height: 0
 
@@ -78,9 +81,13 @@ Item {
                     width: usableWidth
                     height: cell * 4
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: Math.min(
+                    readonly property real baseY: Math.min(
                         parent.height - height - parent.height * 0.055,
                         parent.height * 0.47
+                    )
+                    y: Math.max(
+                        0,
+                        Math.min(parent.height - height, baseY + parent.height * root.yOffsetRatio)
                     )
 
                     Repeater {
@@ -126,7 +133,10 @@ Item {
 
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    y: Math.max(14, parent.height * 0.34)
+                    y: Math.max(14, Math.min(
+                        parent.height - height - 14,
+                        parent.height * 0.34 + parent.height * root.yOffsetRatio
+                    ))
                     width: label.implicitWidth + 24
                     height: label.implicitHeight + 10
                     radius: height / 2
