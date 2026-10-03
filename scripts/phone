@@ -193,6 +193,27 @@ def adb_target_healthy(serial, timeout=2):
     return result.returncode == 0
 
 
+def cache_wireless_target(serial, config=None):
+    """Remember the current native ADB TLS port from any healthy network target."""
+    if not serial or serial.startswith("emulator-") or ":" not in serial:
+        return
+    host, port_text = serial.rsplit(":", 1)
+    try:
+        port = int(port_text)
+    except ValueError:
+        return
+    if not 1 <= port <= 65535:
+        return
+    changes = {"adb_tls_port": port, "adb_tls_seen": int(time.time())}
+    tailscale_ip = (config or {}).get("tailscale_ip", "").strip()
+    normalized_host = host.strip("[]")
+    if tailscale_ip and normalized_host == tailscale_ip:
+        changes["adb_tls_endpoint"] = serial
+    else:
+        changes["adb_lan_endpoint"] = serial
+    save_state(**changes)
+
+
 def try_cached_tailscale(config):
     tailscale_ip = config.get("tailscale_ip", "").strip()
     port = load_state().get("adb_tls_port")
@@ -200,7 +221,10 @@ def try_cached_tailscale(config):
         return None
     endpoint = f"{tailscale_ip}:{port}"
     ok, _ = adb_connect(endpoint, timeout=3)
-    return endpoint if ok else None
+    if ok:
+        save_state(adb_tls_endpoint=endpoint, adb_tls_seen=int(time.time()))
+        return endpoint
+    return None
 
 
 def cleanup_stale():
@@ -339,6 +363,7 @@ def find_target(config, announce=True):
     cleanup_stale()
     target = select_target(get_devices(), config)
     if target and adb_target_healthy(target):
+        cache_wireless_target(target, config)
         return target
     if target:
         run(["adb", "disconnect", target], timeout=2)
@@ -404,6 +429,8 @@ def cmd_doctor(config, configured):
     run(["adb", "start-server"], timeout=5)
     selected = select_target_device(get_devices(), config) if configured else None
     adb_ok = bool(selected and adb_target_healthy(selected["serial"]))
+    if selected and adb_ok:
+        cache_wireless_target(selected["serial"], config)
     if selected and not adb_ok:
         selected = None
     ssh_ok, ssh_detail = ssh_probe(config)
@@ -532,7 +559,9 @@ def cmd_status(config, configured):
     devices = get_devices()
     target_device = select_target_device(devices, config) if configured else None
     target = target_device["serial"] if target_device else None
-    if target and not adb_target_healthy(target):
+    if target and adb_target_healthy(target):
+        cache_wireless_target(target, config)
+    elif target:
         target_device = None
         target = None
     active_transport = ""
