@@ -22,7 +22,7 @@ provides `adb-mdns-discover` from
 
 PhoneMirror prefers the simplest available transport automatically:
 
-1. **USB ADB** when the handset is plugged into Mirai. USB always wins, even if
+1. **USB ADB** when the handset is plugged into the host computer. USB always wins, even if
    an older wireless ADB endpoint is still connected.
 2. **Tailscale + native Wireless Debugging** using the phone-side SSH discovery
    helper.
