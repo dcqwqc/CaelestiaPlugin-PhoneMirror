@@ -1,6 +1,6 @@
 {
   "name": "PhoneMirror",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": "dcqwqc",
   "homepage": "https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror",
   "icon": "smartphone",
@@ -19,13 +19,6 @@
       "source": "toggles/PhoneToggle.qml",
       "properties": {
         "name": "phone"
-      }
-    },
-    {
-      "type": "quick-toggle",
-      "source": "toggles/FullscreenToggle.qml",
-      "properties": {
-        "name": "phoneFullscreen"
       }
     }
   ],

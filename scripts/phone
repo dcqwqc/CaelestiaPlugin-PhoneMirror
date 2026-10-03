@@ -176,6 +176,23 @@ def adb_connect(endpoint, timeout=5):
     return ("connected to" in lower or "already connected to" in lower), out
 
 
+def adb_target_healthy(serial, timeout=2):
+    """Require a real shell round-trip, not just adb's cached `device` state."""
+    if not serial:
+        return False
+    try:
+        result = subprocess.run(
+            ["adb", "-s", serial, "shell", "true"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 def try_cached_tailscale(config):
     tailscale_ip = config.get("tailscale_ip", "").strip()
     port = load_state().get("adb_tls_port")
@@ -321,8 +338,10 @@ def find_target(config, announce=True):
     run(["adb", "start-server"], timeout=5)
     cleanup_stale()
     target = select_target(get_devices(), config)
-    if target:
+    if target and adb_target_healthy(target):
         return target
+    if target:
+        run(["adb", "disconnect", target], timeout=2)
 
     transport = config.get("transport", "auto").strip().lower() or "auto"
     if announce:
@@ -334,8 +353,10 @@ def find_target(config, announce=True):
         for _ in range(4):
             time.sleep(0.35)
             target = select_target(get_devices(), config)
-            if target:
+            if target and adb_target_healthy(target):
                 return target
+            if target:
+                run(["adb", "disconnect", target], timeout=2)
         if transport == "tailscale":
             return None
 
@@ -344,8 +365,10 @@ def find_target(config, announce=True):
         for _ in range(4):
             time.sleep(0.5)
             target = select_target(get_devices(), config)
-            if target:
+            if target and adb_target_healthy(target):
                 return target
+            if target:
+                run(["adb", "disconnect", target], timeout=2)
     return None
 
 
@@ -380,6 +403,9 @@ def ssh_probe(config):
 def cmd_doctor(config, configured):
     run(["adb", "start-server"], timeout=5)
     selected = select_target_device(get_devices(), config) if configured else None
+    adb_ok = bool(selected and adb_target_healthy(selected["serial"]))
+    if selected and not adb_ok:
+        selected = None
     ssh_ok, ssh_detail = ssh_probe(config)
     state = load_state()
     tailscale_ip = config.get("tailscale_ip", "").strip()
@@ -473,6 +499,9 @@ def cmd_status(config, configured):
     devices = get_devices()
     target_device = select_target_device(devices, config) if configured else None
     target = target_device["serial"] if target_device else None
+    if target and not adb_target_healthy(target):
+        target_device = None
+        target = None
     active_transport = ""
     if target_device:
         active_transport = "usb" if target_device.get("usb") else "wireless_adb"

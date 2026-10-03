@@ -3,6 +3,8 @@
 Mirror an Android handset over wireless ADB from the quick toggles, as a
 Caelestia plugin.
 
+When the mirror is running, its single quick-toggle slot expands into a three-way control: **disconnect | PIN guide | fullscreen phone mode**. Fullscreen uses the existing immersive mirror path and the bottom-left exit overlay returns to the normal mirror without disconnecting.
+
 The toggle follows the mirror rather than guessing at it: it reads the running
 scrcpy window off the compositor, so closing the mirror from its own window — or
 the handset dropping off wifi — switches the toggle off on its own.
