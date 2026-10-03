@@ -1,6 +1,6 @@
 {
   "name": "PhoneMirror",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "author": "dcqwqc",
   "homepage": "https://github.com/dcqwqc/CaelestiaPlugin-PhoneMirror",
   "icon": "smartphone",
@@ -13,6 +13,23 @@
     {
       "type": "custom",
       "source": "overlay/FullscreenExit.qml"
+    },
+    {
+      "type": "custom",
+      "source": "overlay/FullscreenShellBridge.qml",
+      "properties": {
+        "slot": "osdForce"
+      }
+    },
+    {
+      "type": "shell-panel",
+      "source": "overlay/FullscreenShellBridge.qml",
+      "properties": {
+        "edge": "right",
+        "alignment": "center",
+        "interactive": false,
+        "deformAmount": 0
+      }
     },
     {
       "type": "quick-toggle",

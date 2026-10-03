@@ -5,18 +5,14 @@ import Quickshell.Wayland
 import Caelestia.Config
 import Caelestia.Plugins
 import qs.components
-import qs.components.controls
 import qs.services
-import qs.utils
 import dcqwqc.phonemirror.services as PhoneMirror
 
 // Immersive phone-mode chrome.
 //
-// scrcpy keeps the handset's portrait aspect ratio in fullscreen, which leaves
-// wide side gutters on a laptop display. Those gutters are deliberately owned
-// by two opaque-black layer surfaces: on OLED this makes the unused pixels truly
-// black, and it gives us permanent room for volume/brightness controls without
-// covering the mirrored phone.
+// The black layer windows only replace scrcpy's unused side gutters. The actual
+// volume/brightness UI is QuickShell's native OSD, forced open by the osdForce
+// bridge while phone fullscreen is active.
 Item {
     id: root
     width: 0
@@ -78,12 +74,9 @@ Item {
 
             readonly property HyprlandToplevel client: root.client
             readonly property HyprlandMonitor hyprMonitor: client?.monitor ?? null
-            readonly property Brightness.Monitor brightnessMonitor: Brightness.getMonitorForScreen(modelData)
             readonly property bool ownsClient:
                 !!client && !!hyprMonitor && hyprMonitor.name === modelData.name
 
-            // scrcpy scales a portrait handset until one screen axis is full.
-            // The remaining width is exactly the pair of unused side gutters.
             readonly property real portraitAspect: Math.max(0.2, Math.min(1, PhoneMirror.Phone.displayAspect))
             readonly property real renderedPhoneWidth: Math.min(modelData.width, modelData.height * portraitAspect)
             readonly property int gutterWidth: Math.max(0, Math.round((modelData.width - renderedPhoneWidth) / 2))
@@ -105,22 +98,9 @@ Item {
                 anchors.bottom: true
 
                 WlrLayershell.exclusionMode: ExclusionMode.Ignore
-                WlrLayershell.layer: WlrLayer.Overlay
+                WlrLayershell.layer: WlrLayer.Top
                 WlrLayershell.namespace: "phonemirror-fullscreen-left"
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-
-                FilledSlider {
-                    id: volumeSlider
-
-                    anchors.centerIn: parent
-                    width: Math.min(300, Math.max(128, leftGutter.width - 56))
-                    height: Tokens.sizes.osd.sliderHeight
-
-                    icon: Icons.getVolumeIcon(value, Audio.muted)
-                    value: Audio.volume
-                    to: GlobalConfig.services.maxVolume
-                    onMoved: Audio.setVolume(value)
-                }
 
                 Row {
                     anchors.left: parent.left
@@ -129,7 +109,6 @@ Item {
                     anchors.bottomMargin: 14
                     spacing: 8
 
-                    // No circular container: just the icon itself, as requested.
                     FlatControl {
                         icon: "fullscreen_exit"
                         onClicked: PhoneMirror.Phone.setFullscreen(false)
@@ -161,19 +140,9 @@ Item {
                 anchors.bottom: true
 
                 WlrLayershell.exclusionMode: ExclusionMode.Ignore
-                WlrLayershell.layer: WlrLayer.Overlay
+                WlrLayershell.layer: WlrLayer.Top
                 WlrLayershell.namespace: "phonemirror-fullscreen-right"
                 WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-
-                FilledSlider {
-                    anchors.centerIn: parent
-                    width: Math.min(300, Math.max(128, rightGutter.width - 56))
-                    height: Tokens.sizes.osd.sliderHeight
-
-                    icon: `brightness_${Math.round(value * 6) + 1}`
-                    value: scope.brightnessMonitor?.brightness ?? 0
-                    onMoved: scope.brightnessMonitor?.setBrightness(value)
-                }
             }
         }
     }
