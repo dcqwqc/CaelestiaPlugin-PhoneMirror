@@ -128,7 +128,7 @@ Once SSH is running, `phone persist-ssh` installs
 `~/.termux/boot/00-phone-mirror-ssh` plus supervised `sshd` and
 `phone-ssh-watchdog` services on the handset. The boot hook acquires a Termux wake
 lock, starts the runit supervisor, retries service activation while Android is
-still settling after boot, and leaves both services self-healing.
+still settling after boot, and leaves both services self-healing. It also keeps a stable `~/.termux/boot/start-mirai-ssh.sh` compatibility entry point for existing Tasker automations.
 
 Reboot persistence requires the separate **Termux:Boot** app to be installed and
 opened once on Android. Android battery/background restrictions can still kill
