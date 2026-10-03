@@ -126,6 +126,17 @@ Item {
                         onClicked: PhoneMirror.Phone.setFullscreen(false)
                     }
 
+                    // Keep the visual PIN guide reachable without leaving
+                    // fullscreen. Its selected state mirrors the same shared
+                    // state used by the normal quick-toggle PIN segment.
+                    SegmentControl {
+                        first: false
+                        last: false
+                        checked: PhoneMirror.Phone.pinGuideVisible
+                        icon: checked ? "visibility_off" : "pin"
+                        onClicked: PhoneMirror.Phone.togglePinGuide()
+                    }
+
                     SegmentControl {
                         first: false
                         last: false
