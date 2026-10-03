@@ -1,0 +1,11 @@
+#!/bin/sh
+set -u
+PHONE="$HOME/.local/bin/phone"
+while :; do
+    if "$PHONE" status 2>/dev/null | grep -q '"connected": true'; then
+        sleep 60
+        continue
+    fi
+    "$PHONE" ensure >/dev/null 2>&1 || true
+    sleep 20
+done

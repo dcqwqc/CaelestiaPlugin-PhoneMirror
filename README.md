@@ -128,3 +128,20 @@ for a truly always-available remote path.
 The launcher also caches the last working native Wireless Debugging TLS port.
 That lets an existing ADB-over-Tailscale connection recover even when Termux
 SSH has temporarily died, as long as Android has not changed the ADB TLS port.
+
+## Always-ready reconnect
+
+Mirai can keep the configured handset's wireless ADB transport warm with the
+included `phone-mirror-autoconnect.service`. The service is intentionally quiet:
+it checks local ADB state, sleeps while connected, and uses `phone ensure` only
+when the handset disappears. `phone ensure` performs the same USB/Tailscale/mDNS
+recovery as `phone connect` without desktop notifications.
+
+Install on a systemd-user host with:
+
+    ln -sfn ~/.local/share/caelestia/plugins/phone-mirror/systemd/phone-mirror-autoconnect.service ~/.config/systemd/user/phone-mirror-autoconnect.service
+    systemctl --user daemon-reload
+    systemctl --user enable --now phone-mirror-autoconnect.service
+
+For handset reboot persistence, Termux still needs Termux:Boot installed and
+opened once so Android executes `~/.termux/boot/` after boot.

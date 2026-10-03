@@ -349,13 +349,15 @@ def find_target(config, announce=True):
     return None
 
 
-def cmd_connect(config, configured):
+def cmd_connect(config, configured, announce=True):
     if not configured:
-        print(f"No {CONFIG_PATH}. Run `phone pair` (or `phone setup`).", file=sys.stderr)
+        if announce:
+            print(f"No {CONFIG_PATH}. Run `phone pair` (or `phone setup`).", file=sys.stderr)
         return 2
-    target = find_target(config)
+    target = find_target(config, announce=announce)
     if not target:
-        print(f"Could not connect {config['name']}.", file=sys.stderr)
+        if announce:
+            print(f"Could not connect {config['name']}.", file=sys.stderr)
         return 1
     print(target)
     return 0
@@ -735,6 +737,8 @@ def main():
             return cmd_status(config, configured)
         if command == "connect":
             return cmd_connect(config, configured)
+        if command == "ensure":
+            return cmd_connect(config, configured, announce=False)
         if command == "doctor":
             return cmd_doctor(config, configured)
         if command == "persist-ssh":

@@ -1,0 +1,12 @@
+[Unit]
+Description=Keep PhoneMirror wireless ADB ready
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/caelestia/plugins/phone-mirror/scripts/phone-autoconnect
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
