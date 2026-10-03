@@ -7,7 +7,7 @@ When the mirror is running, its single quick-toggle slot expands into a three-wa
 
 PhoneMirror uses Hyprland’s Lua dispatcher-object IPC on 0.55+ for deterministic fullscreen set/unset, with a legacy dispatcher fallback for older Hyprland versions.
 
-SSH persistence uses runit correctly: `run` execs the real sshd master directly, while a `finish` hook adds a short retry delay if Tailscale is not ready yet. This keeps `sv restart` deterministic and prevents orphaned sshd processes.
+SSH persistence is dual-supervised: runit owns the real `sshd` master and restarts it on exit, while a separate runit watchdog verifies that the configured SSH port is actually listening and restarts the service if it becomes wedged. A `finish` hook prevents hot restart loops, and logs stay on-device instead of becoming desktop notifications.
 
 Every healthy wireless ADB target refreshes the cached native TLS port, so a later LAN change can immediately reconnect through the handset’s Tailscale IP without rediscovering the port first.
 
@@ -125,8 +125,10 @@ While the guide is enabled, only the keypad region captures pointer input; the r
 PhoneMirror can diagnose the whole path with `phone doctor`. For the preferred
 Tailscale transport it expects the phone-side Termux SSH server to be reachable.
 Once SSH is running, `phone persist-ssh` installs
-`~/.termux/boot/00-phone-mirror-ssh` on the handset. The boot script starts
-`sshd` and takes a Termux wake lock when that command is available.
+`~/.termux/boot/00-phone-mirror-ssh` plus supervised `sshd` and
+`phone-ssh-watchdog` services on the handset. The boot hook acquires a Termux wake
+lock, starts the runit supervisor, retries service activation while Android is
+still settling after boot, and leaves both services self-healing.
 
 Reboot persistence requires the separate **Termux:Boot** app to be installed and
 opened once on Android. Android battery/background restrictions can still kill

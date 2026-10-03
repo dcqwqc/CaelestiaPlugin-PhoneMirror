@@ -611,18 +611,77 @@ SVDIR="$PREFIX/var/service"
 LOGDIR="$PREFIX/var/log"
 BOOT_DIR="$HOME/.termux/boot"
 BOOT_FILE="$BOOT_DIR/00-phone-mirror-ssh"
-RUN_FILE="$SVDIR/sshd/run"
-FINISH_FILE="$SVDIR/sshd/finish"
-mkdir -p "$BOOT_DIR" "$SVDIR/sshd" "$HOME/.local/state"
-cat > "$RUN_FILE" <<'EOF'
+SSHD_DIR="$SVDIR/sshd"
+WATCH_DIR="$SVDIR/phone-ssh-watchdog"
+CONFIG="$HOME/.ssh/sshd-mirai.conf"
+STATE="$HOME/.local/state"
+LOG="$STATE/phone-mirror-boot.log"
+
+mkdir -p "$BOOT_DIR" "$SSHD_DIR/log" "$WATCH_DIR" "$STATE" "$LOGDIR/sshd"
+chmod 700 "$HOME/.ssh" 2>/dev/null || true
+chmod 600 "$HOME/.ssh/authorized_keys" 2>/dev/null || true
+
+# Refuse to install a supervisor around a broken daemon configuration. This
+# catches a bad config now instead of creating an endless invisible restart loop.
+"$PREFIX/bin/sshd" -t -f "$CONFIG"
+
+cat > "$SSHD_DIR/run" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
-exec /data/data/com.termux/files/usr/bin/sshd -D -e -f /data/data/com.termux/files/home/.ssh/sshd-mirai.conf 2>&1
+PREFIX=/data/data/com.termux/files/usr
+HOME=/data/data/com.termux/files/home
+exec "$PREFIX/bin/sshd" -D -e -f "$HOME/.ssh/sshd-mirai.conf"
 EOF
-cat > "$FINISH_FILE" <<'EOF'
+cat > "$SSHD_DIR/finish" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
+# Avoid a hot restart loop if Android networking/Tailscale is still coming up.
 sleep 2
 EOF
-chmod 700 "$RUN_FILE" "$FINISH_FILE"
+cat > "$SSHD_DIR/log/run" <<'EOF'
+#!/data/data/com.termux/files/usr/bin/sh
+PREFIX=/data/data/com.termux/files/usr
+LOGDIR="$PREFIX/var/log/sshd"
+mkdir -p "$LOGDIR"
+exec "$PREFIX/bin/svlogd" -tt "$LOGDIR"
+EOF
+
+# runit already restarts sshd when it exits. The second supervised service is a
+# health watchdog for the rarer case where sshd exists but stops listening.
+cat > "$WATCH_DIR/run" <<'EOF'
+#!/data/data/com.termux/files/usr/bin/sh
+PREFIX=/data/data/com.termux/files/usr
+HOME=/data/data/com.termux/files/home
+PATH="$PREFIX/bin:$PATH"
+SVDIR="$PREFIX/var/service"
+CONFIG="$HOME/.ssh/sshd-mirai.conf"
+STATE="$HOME/.local/state"
+LOG="$STATE/phone-ssh-watchdog.log"
+mkdir -p "$STATE"
+PORT=$(awk 'tolower($1)=="port" { print $2; exit }' "$CONFIG" 2>/dev/null)
+[ -n "$PORT" ] || PORT=8022
+listener_ok() {
+    if [ -x "$PREFIX/bin/ss" ]; then
+        "$PREFIX/bin/ss" -ltn 2>/dev/null | awk -v p=":$PORT" '$4 ~ p"$" {found=1} END {exit !found}'
+    else
+        pgrep -f 'sshd .*sshd-mirai.conf' >/dev/null 2>&1
+    fi
+}
+while :; do
+    if ! "$PREFIX/bin/sshd" -t -f "$CONFIG" >/dev/null 2>&1; then
+        printf '%s config-invalid\n' "$(date -Iseconds)" >> "$LOG"
+        sleep 30
+        continue
+    fi
+    if ! listener_ok; then
+        printf '%s listener-missing restart\n' "$(date -Iseconds)" >> "$LOG"
+        rm -f "$SVDIR/sshd/down"
+        "$PREFIX/bin/sv" restart "$SVDIR/sshd" >/dev/null 2>&1 || true
+    fi
+    sleep 15
+done
+EOF
+chmod 700 "$SSHD_DIR/run" "$SSHD_DIR/finish" "$SSHD_DIR/log/run" "$WATCH_DIR/run"
+rm -f "$SSHD_DIR/down" "$WATCH_DIR/down"
+
 cat > "$BOOT_FILE" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
 PREFIX=/data/data/com.termux/files/usr
@@ -637,27 +696,42 @@ mkdir -p "$STATE"
 {
     echo "=== boot hook $(date -Iseconds) ==="
     "$PREFIX/bin/termux-wake-lock" >/dev/null 2>&1 || true
-    rm -f "$SVDIR/sshd/down"
+    rm -f "$SVDIR/sshd/down" "$SVDIR/phone-ssh-watchdog/down"
     "$PREFIX/bin/service-daemon" start >/dev/null 2>&1 || true
-    sleep 1
-    "$PREFIX/bin/sv" up "$SVDIR/sshd" || true
-    "$PREFIX/bin/sv" status "$SVDIR/sshd" || true
+    # runsvdir may need a moment to discover newly-created services after boot.
+    CONFIG="$HOME/.ssh/sshd-mirai.conf"
+    PORT=$(awk 'tolower($1)=="port" { print $2; exit }' "$CONFIG" 2>/dev/null)
+    [ -n "$PORT" ] || PORT=8022
+    for _ in 1 2 3 4 5; do
+        "$PREFIX/bin/sv" up "$SVDIR/sshd" "$SVDIR/phone-ssh-watchdog" >/dev/null 2>&1 || true
+        "$PREFIX/bin/sv" status "$SVDIR/sshd" "$SVDIR/phone-ssh-watchdog" 2>/dev/null || true
+        if [ -x "$PREFIX/bin/ss" ] && "$PREFIX/bin/ss" -ltn 2>/dev/null | grep -q ":$PORT "; then
+            break
+        fi
+        sleep 2
+    done
 } >> "$LOG" 2>&1
 EOF
 chmod 700 "$BOOT_FILE"
-rm -f "$SVDIR/sshd/down"
+
+# Apply immediately as well as on the next Android boot.
 export PREFIX HOME PATH SVDIR LOGDIR
+"$PREFIX/bin/termux-wake-lock" >/dev/null 2>&1 || true
 "$PREFIX/bin/service-daemon" start >/dev/null 2>&1 || true
 sleep 1
-"$PREFIX/bin/sv" restart "$SVDIR/sshd" >/dev/null 2>&1 || true
+"$PREFIX/bin/sv" up "$SSHD_DIR" "$WATCH_DIR" >/dev/null 2>&1 || true
+sleep 1
+"$PREFIX/bin/sv" restart "$SSHD_DIR" >/dev/null 2>&1 || true
+
 if pm list packages 2>/dev/null | grep -q '^package:com.termux.boot$'; then
     echo TERMUX_BOOT=installed
 else
     echo TERMUX_BOOT=missing
 fi
 echo BOOT_FILE="$BOOT_FILE"
-echo RUN_FILE="$RUN_FILE"
-echo FINISH_FILE="$FINISH_FILE"
+echo SSHD_SERVICE="$SSHD_DIR"
+echo WATCHDOG_SERVICE="$WATCH_DIR"
+"$PREFIX/bin/sv" status "$SSHD_DIR" "$WATCH_DIR" 2>/dev/null || true
 """
 
 
