@@ -7,6 +7,8 @@ When the mirror is running, its single quick-toggle slot expands into a three-wa
 
 PhoneMirror uses Hyprland’s Lua dispatcher-object IPC on 0.55+ for deterministic fullscreen set/unset, with a legacy dispatcher fallback for older Hyprland versions.
 
+SSH persistence uses runit correctly: `run` execs the real sshd master directly, while a `finish` hook adds a short retry delay if Tailscale is not ready yet. This keeps `sv restart` deterministic and prevents orphaned sshd processes.
+
 The toggle follows the mirror rather than guessing at it: it reads the running
 scrcpy window off the compositor, so closing the mirror from its own window — or
 the handset dropping off wifi — switches the toggle off on its own.

@@ -449,17 +449,17 @@ LOGDIR="$PREFIX/var/log"
 BOOT_DIR="$HOME/.termux/boot"
 BOOT_FILE="$BOOT_DIR/00-phone-mirror-ssh"
 RUN_FILE="$SVDIR/sshd/run"
+FINISH_FILE="$SVDIR/sshd/finish"
 mkdir -p "$BOOT_DIR" "$SVDIR/sshd" "$HOME/.local/state"
 cat > "$RUN_FILE" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
-PREFIX=/data/data/com.termux/files/usr
-TAILSCALE_IP=100.123.63.113
-while ! /system/bin/ip addr 2>/dev/null | grep -q "$TAILSCALE_IP"; do
-    sleep 2
-done
-exec "$PREFIX/bin/sshd" -D -e -f /data/data/com.termux/files/home/.ssh/sshd-mirai.conf 2>&1
+exec /data/data/com.termux/files/usr/bin/sshd -D -e -f /data/data/com.termux/files/home/.ssh/sshd-mirai.conf 2>&1
 EOF
-chmod 700 "$RUN_FILE"
+cat > "$FINISH_FILE" <<'EOF'
+#!/data/data/com.termux/files/usr/bin/sh
+sleep 2
+EOF
+chmod 700 "$RUN_FILE" "$FINISH_FILE"
 cat > "$BOOT_FILE" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
 PREFIX=/data/data/com.termux/files/usr
@@ -486,7 +486,7 @@ rm -f "$SVDIR/sshd/down"
 export PREFIX HOME PATH SVDIR LOGDIR
 "$PREFIX/bin/service-daemon" start >/dev/null 2>&1 || true
 sleep 1
-"$PREFIX/bin/sv" up "$SVDIR/sshd" >/dev/null 2>&1 || true
+"$PREFIX/bin/sv" restart "$SVDIR/sshd" >/dev/null 2>&1 || true
 if pm list packages 2>/dev/null | grep -q '^package:com.termux.boot$'; then
     echo TERMUX_BOOT=installed
 else
@@ -494,6 +494,7 @@ else
 fi
 echo BOOT_FILE="$BOOT_FILE"
 echo RUN_FILE="$RUN_FILE"
+echo FINISH_FILE="$FINISH_FILE"
 """
 
 
