@@ -111,3 +111,20 @@ positive values move it downward.
 ## Interactive PIN guide
 
 While the guide is enabled, only the keypad region captures pointer input; the rest of the mirror remains click-through. Digit taps are sent directly to the already-connected Android handset, the preview exists only in memory, and backspace removes the last preview digit. Closing the guide clears the preview.
+
+## Persistent phone SSH
+
+PhoneMirror can diagnose the whole path with `phone doctor`. For the preferred
+Tailscale transport it expects the phone-side Termux SSH server to be reachable.
+Once SSH is running, `phone persist-ssh` installs
+`~/.termux/boot/00-phone-mirror-ssh` on the handset. The boot script starts
+`sshd` and takes a Termux wake lock when that command is available.
+
+Reboot persistence requires the separate **Termux:Boot** app to be installed and
+opened once on Android. Android battery/background restrictions can still kill
+Termux, so set Termux, Termux:Boot and Tailscale to unrestricted background use
+for a truly always-available remote path.
+
+The launcher also caches the last working native Wireless Debugging TLS port.
+That lets an existing ADB-over-Tailscale connection recover even when Termux
+SSH has temporarily died, as long as Android has not changed the ADB TLS port.
