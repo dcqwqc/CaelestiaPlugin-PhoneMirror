@@ -8,32 +8,42 @@ import Caelestia.Plugins
 // `phone setup`, and differs per machine, so it has no business being synced
 // through a settings UI. These are the knobs you actually change.
 SettingsObject {
-    property int maxSize: 1440
+    property string qualityPreset: "best"
+    SettingMeta on qualityPreset {
+        label: "Stream quality"
+        description: "Best uses native resolution and hardware HEVC. Lower profiles reduce bandwidth for weaker remote links."
+        icon: "high_quality"
+        inputType: SettingMeta.SplitButton
+        options: ["best", "balanced", "data-saver", "custom"]
+        optionIcons: ["high_quality", "balance", "data_saver_on", "tune"]
+    }
+
+    property int maxSize: 2412
     SettingMeta on maxSize {
-        label: "Maximum size"
-        description: "Longest edge of the stream, in pixels. Lower it on a weak link."
+        label: "Custom maximum size"
+        description: "Longest edge of the stream in custom mode. 0 means native resolution."
         icon: "aspect_ratio"
         inputType: SettingMeta.SpinBox
-        min: 480
+        min: 0
         max: 4096
         step: 80
     }
 
-    property int bitrateMbps: 16
+    property int bitrateMbps: 40
     SettingMeta on bitrateMbps {
-        label: "Bitrate"
-        description: "Video bitrate in Mbps."
+        label: "Custom bitrate"
+        description: "Video bitrate in Mbps for custom mode."
         icon: "speed"
         inputType: SettingMeta.Slider
         min: 2
-        max: 50
+        max: 80
         step: 1
     }
 
     property int maxFps: 120
     SettingMeta on maxFps {
-        label: "Frame rate cap"
-        description: "Frames per second. The handset will not exceed its own refresh rate."
+        label: "Custom frame rate cap"
+        description: "Maximum frames per second in custom mode."
         icon: "60fps"
         inputType: SettingMeta.SpinBox
         min: 15
@@ -41,11 +51,20 @@ SettingsObject {
         step: 5
     }
 
+    property string videoCodec: "h265"
+    SettingMeta on videoCodec {
+        label: "Custom codec"
+        description: "HEVC/H.265 gives better quality per bit on supported hardware."
+        icon: "movie"
+        inputType: SettingMeta.SplitButton
+        options: ["h265", "h264"]
+    }
+
     property bool screenOff: false
     SettingMeta on screenOff {
         label: "Black the physical phone display"
         description: "Set the physical phone brightness to zero while mirroring, then restore its previous brightness and mode on exit."
-        icon: "mobile_off"
+        icon: "brightness_2"
         inputType: SettingMeta.Switch
     }
 

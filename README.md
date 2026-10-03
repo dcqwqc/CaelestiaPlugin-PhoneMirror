@@ -157,3 +157,8 @@ opened once so Android executes `~/.termux/boot/` after boot.
 ## Immersive phone mode
 
 Fullscreen phone mode uses true-black side gutters around the portrait mirror. While it is active, the existing QuickShell OSD is forced open on the right; PhoneMirror does not implement its own volume or brightness sliders, so any future QuickShell OSD styling or behavior changes are inherited automatically. Leaving fullscreen releases that force and the native OSD animates closed normally. Bottom-left flat controls can leave fullscreen, toggle the physical phone display to black, or close the mirror. The phone-display toggle is persistent; the launcher snapshots Android brightness and brightness mode and restores both whenever the mirror exits.
+
+
+## Stream quality
+
+The default `best` profile uses native resolution with HEVC/H.265, 40 Mbps and a 120 fps cap. `balanced` uses a 1920 px long edge at 12 Mbps/60 fps, while `data-saver` uses 1280 px at 4 Mbps/30 fps. `custom` exposes size, bitrate, frame-rate and codec controls. Profile changes apply on the next mirror start.

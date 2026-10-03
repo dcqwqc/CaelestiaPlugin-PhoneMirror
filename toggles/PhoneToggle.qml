@@ -4,11 +4,9 @@ import qs.components
 import qs.services
 import dcqwqc.phonemirror.services as PhoneMirror
 
-// One quick-toggle slot for the entire PhoneMirror feature.
-//
-// Off: one normal phone button.
-// Running: the same surface becomes a three-way control:
-//   power/disconnect | secure PIN guide | immersive fullscreen phone mode.
+// One quick-toggle slot for the whole PhoneMirror feature. When connected it
+// becomes a three-segment control, but every segment remains its own rounded
+// surface instead of being cut into one rectangular pill.
 StyledRect {
     id: root
 
@@ -23,53 +21,72 @@ StyledRect {
     readonly property bool expanded: PhoneMirror.Phone.running
     readonly property bool overlayActive: expanded && PhoneMirror.Phone.pinGuideVisible
     readonly property bool fullscreenActive: expanded && PhoneMirror.Phone.fullscreenActive
-    readonly property real primaryWidth: expanded ? Math.round(width / 3) : width
-    readonly property real secondaryWidth: expanded ? Math.round((width - primaryWidth) / 2) : 0
-    readonly property color activeColour: Colours.palette.m3primary
-    readonly property color activeOnColour: Colours.palette.m3onPrimary
-    readonly property color inactiveColour: Colours.light
-        ? Qt.rgba(0.78, 0.78, 0.80, 1)
-        : Qt.rgba(0.29, 0.29, 0.31, 1)
-    readonly property color inactiveOnColour: Colours.light
-        ? Qt.rgba(0.16, 0.16, 0.18, 1)
-        : Qt.rgba(0.93, 0.93, 0.95, 1)
 
-    radius: expanded || primaryLayer.pressed || pinLayer.pressed || fullscreenLayer.pressed
-        ? Tokens.rounding.medium
+    readonly property real outerRadius: expanded
+        ? Math.min(height / 2, Tokens.rounding.large)
         : Math.min(width, height) / 2 * Math.min(1, Tokens.rounding.scale)
+    readonly property real innerRadius: Math.min(outerRadius, Tokens.rounding.extraSmall)
+    readonly property real segmentGap: expanded ? Math.max(2, Math.round(Tokens.spacing.extraSmall / 2)) : 0
+    readonly property real usableWidth: width - segmentGap * 2
+    readonly property real primaryWidth: expanded ? Math.floor(usableWidth / 3) : width
+    readonly property real secondaryWidth: expanded ? Math.floor((usableWidth - primaryWidth) / 2) : 0
+
+    // Deliberately neutral rather than m3primary: the old selected state became
+    // green with the current palette and made these utility actions look loud.
+    readonly property color selectedColour: Colours.palette.m3onSurface
+    readonly property color selectedOnColour: Colours.palette.m3surface
+    readonly property color inactiveColour: Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
+    readonly property color inactiveOnColour: Colours.palette.m3onSurfaceVariant
+
+    radius: outerRadius
     color: "transparent"
 
-    StyledRect {
+    component SegmentSurface: StyledRect {
+        required property bool first
+        required property bool last
+        property bool selected: false
+
+        radius: 0
+        topLeftRadius: first ? root.outerRadius : root.innerRadius
+        bottomLeftRadius: first ? root.outerRadius : root.innerRadius
+        topRightRadius: last ? root.outerRadius : root.innerRadius
+        bottomRightRadius: last ? root.outerRadius : root.innerRadius
+        color: selected ? root.selectedColour : root.inactiveColour
+
+        Behavior on color { CAnim {} }
+    }
+
+    SegmentSurface {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: root.primaryWidth
-        radius: root.radius
-        topRightRadius: root.expanded ? 0 : root.radius
-        bottomRightRadius: root.expanded ? 0 : root.radius
-        color: root.expanded ? root.activeColour : root.inactiveColour
+        first: true
+        last: !root.expanded
     }
 
-    StyledRect {
+    SegmentSurface {
         visible: root.expanded
         anchors.left: primaryAction.right
+        anchors.leftMargin: root.segmentGap
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: root.secondaryWidth
-        radius: 0
-        color: root.overlayActive ? root.activeColour : root.inactiveColour
+        first: false
+        last: false
+        selected: root.overlayActive
     }
 
-    StyledRect {
+    SegmentSurface {
         visible: root.expanded
         anchors.left: pinAction.right
+        anchors.leftMargin: root.segmentGap
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        radius: root.radius
-        topLeftRadius: 0
-        bottomLeftRadius: 0
-        color: root.fullscreenActive ? root.activeColour : root.inactiveColour
+        first: false
+        last: true
+        selected: root.fullscreenActive
     }
 
     Item {
@@ -81,11 +98,11 @@ StyledRect {
 
         StateLayer {
             id: primaryLayer
-            color: root.expanded ? root.activeOnColour : root.inactiveOnColour
-            rect.topLeftRadius: root.radius
-            rect.bottomLeftRadius: root.radius
-            rect.topRightRadius: root.expanded ? 0 : root.radius
-            rect.bottomRightRadius: root.expanded ? 0 : root.radius
+            color: root.inactiveOnColour
+            rect.topLeftRadius: root.outerRadius
+            rect.bottomLeftRadius: root.outerRadius
+            rect.topRightRadius: root.expanded ? root.innerRadius : root.outerRadius
+            rect.bottomRightRadius: root.expanded ? root.innerRadius : root.outerRadius
             onClicked: PhoneMirror.Phone.toggle()
         }
 
@@ -96,7 +113,7 @@ StyledRect {
             text: !PhoneMirror.Phone.configured
                 ? "phonelink_setup"
                 : (root.expanded ? "power_settings_new" : "smartphone")
-            color: root.expanded ? root.activeOnColour : root.inactiveOnColour
+            color: root.inactiveOnColour
             fill: root.expanded ? 1 : 0
             fontStyle: Tokens.font.icon.medium
         }
@@ -106,17 +123,18 @@ StyledRect {
         id: pinAction
         visible: root.expanded
         anchors.left: primaryAction.right
+        anchors.leftMargin: root.segmentGap
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: root.secondaryWidth
 
         StateLayer {
             id: pinLayer
-            color: root.overlayActive ? root.activeOnColour : root.inactiveOnColour
-            rect.topLeftRadius: 0
-            rect.bottomLeftRadius: 0
-            rect.topRightRadius: 0
-            rect.bottomRightRadius: 0
+            color: root.overlayActive ? root.selectedOnColour : root.inactiveOnColour
+            rect.topLeftRadius: root.innerRadius
+            rect.bottomLeftRadius: root.innerRadius
+            rect.topRightRadius: root.innerRadius
+            rect.bottomRightRadius: root.innerRadius
             onClicked: PhoneMirror.Phone.togglePinGuide()
         }
 
@@ -124,7 +142,7 @@ StyledRect {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
             text: "dialpad"
-            color: root.overlayActive ? root.activeOnColour : root.inactiveOnColour
+            color: root.overlayActive ? root.selectedOnColour : root.inactiveOnColour
             fill: root.overlayActive ? 1 : 0
             fontStyle: Tokens.font.icon.medium
         }
@@ -134,17 +152,18 @@ StyledRect {
         id: fullscreenAction
         visible: root.expanded
         anchors.left: pinAction.right
+        anchors.leftMargin: root.segmentGap
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
 
         StateLayer {
             id: fullscreenLayer
-            color: root.fullscreenActive ? root.activeOnColour : root.inactiveOnColour
-            rect.topLeftRadius: 0
-            rect.bottomLeftRadius: 0
-            rect.topRightRadius: root.radius
-            rect.bottomRightRadius: root.radius
+            color: root.fullscreenActive ? root.selectedOnColour : root.inactiveOnColour
+            rect.topLeftRadius: root.innerRadius
+            rect.bottomLeftRadius: root.innerRadius
+            rect.topRightRadius: root.outerRadius
+            rect.bottomRightRadius: root.outerRadius
             onClicked: PhoneMirror.Phone.toggleFullscreen()
         }
 
@@ -152,33 +171,11 @@ StyledRect {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
             text: root.fullscreenActive ? "fullscreen_exit" : "fullscreen"
-            color: root.fullscreenActive ? root.activeOnColour : root.inactiveOnColour
+            color: root.fullscreenActive ? root.selectedOnColour : root.inactiveOnColour
             fill: root.fullscreenActive ? 1 : 0
             fontStyle: Tokens.font.icon.medium
         }
     }
-
-    Rectangle {
-        visible: root.expanded
-        anchors.left: primaryAction.right
-        anchors.verticalCenter: parent.verticalCenter
-        width: 1
-        height: Math.round(parent.height * 0.42)
-        color: Colours.palette.m3outline
-        opacity: 0.42
-    }
-
-    Rectangle {
-        visible: root.expanded
-        anchors.left: pinAction.right
-        anchors.verticalCenter: parent.verticalCenter
-        width: 1
-        height: Math.round(parent.height * 0.42)
-        color: Colours.palette.m3outline
-        opacity: 0.42
-    }
-
-    Behavior on radius { Anim { type: Anim.FastSpatial } }
 
     onVisibleChanged: if (visible)
         PhoneMirror.Phone.refresh()

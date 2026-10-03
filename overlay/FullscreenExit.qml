@@ -31,37 +31,47 @@ Item {
         PhoneMirror.Phone.setPhysicalScreenBlack(enabled);
     }
 
-    component FlatControl: Item {
+    component SegmentControl: StyledRect {
         id: control
 
         required property string icon
+        required property bool first
+        required property bool last
         property bool checked: false
         signal clicked()
 
         width: 44
         height: 44
-        scale: tap.pressed ? 0.88 : 1
-        opacity: hover.hovered || tap.pressed ? 1 : 0.82
+        radius: 0
+        topLeftRadius: first ? Tokens.rounding.large : Tokens.rounding.extraSmall
+        bottomLeftRadius: first ? Tokens.rounding.large : Tokens.rounding.extraSmall
+        topRightRadius: last ? Tokens.rounding.large : Tokens.rounding.extraSmall
+        bottomRightRadius: last ? Tokens.rounding.large : Tokens.rounding.extraSmall
+        color: checked ? Qt.rgba(0.96, 0.96, 0.96, 1) : Qt.rgba(1, 1, 1, 0.10)
+        scale: layer.pressed ? 0.94 : 1
 
+        Behavior on color { CAnim {} }
         Behavior on scale { Anim { type: Anim.FastSpatial } }
-        Behavior on opacity { Anim { type: Anim.DefaultEffects } }
+
+        StateLayer {
+            id: layer
+            anchors.fill: parent
+            color: checked ? Qt.rgba(0, 0, 0, 0.88) : "white"
+            rect.topLeftRadius: control.topLeftRadius
+            rect.bottomLeftRadius: control.bottomLeftRadius
+            rect.topRightRadius: control.topRightRadius
+            rect.bottomRightRadius: control.bottomRightRadius
+            onClicked: control.clicked()
+        }
 
         MaterialIcon {
             anchors.centerIn: parent
             text: control.icon
-            color: control.checked ? Colours.palette.m3primary : "white"
-            fill: control.checked ? 1 : 0
+            color: checked ? Qt.rgba(0.05, 0.05, 0.05, 1) : "white"
+            fill: checked ? 1 : 0
             fontStyle: Tokens.font.icon.medium
         }
 
-        HoverHandler {
-            id: hover
-        }
-
-        TapHandler {
-            id: tap
-            onTapped: control.clicked()
-        }
     }
 
     Variants {
@@ -107,20 +117,26 @@ Item {
                     anchors.bottom: parent.bottom
                     anchors.leftMargin: 16
                     anchors.bottomMargin: 14
-                    spacing: 8
+                    spacing: Math.max(2, Math.round(Tokens.spacing.extraSmall / 2))
 
-                    FlatControl {
+                    SegmentControl {
+                        first: true
+                        last: false
                         icon: "fullscreen_exit"
                         onClicked: PhoneMirror.Phone.setFullscreen(false)
                     }
 
-                    FlatControl {
+                    SegmentControl {
+                        first: false
+                        last: false
                         checked: root.blackPhoneEnabled
-                        icon: checked ? "mobile_off" : "brightness_high"
+                        icon: checked ? "brightness_2" : "brightness_7"
                         onClicked: root.setBlackPhoneEnabled(!root.blackPhoneEnabled)
                     }
 
-                    FlatControl {
+                    SegmentControl {
+                        first: false
+                        last: true
                         icon: "power_settings_new"
                         onClicked: PhoneMirror.Phone.stop()
                     }

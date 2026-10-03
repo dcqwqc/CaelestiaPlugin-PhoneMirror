@@ -60,6 +60,7 @@ DEFAULTS = {
     "max_size": "1440",
     "video_bitrate": "16M",
     "max_fps": "120",
+    "video_codec": "h264",
 }
 
 
@@ -77,6 +78,31 @@ PLUGIN_SETTINGS = {
     "maxSize": ("max_size", str),
     "bitrateMbps": ("video_bitrate", lambda v: f"{v}M"),
     "maxFps": ("max_fps", str),
+    "videoCodec": ("video_codec", str),
+}
+
+QUALITY_PRESETS = {
+    # Native pixels. On the Nothing Phone 2 this is 1080x2412 and avoids the
+    # visible upscale caused by the old 1440-long-edge limit. HEVC is backed by
+    # the handset's Qualcomm hardware encoder.
+    "best": {
+        "max_size": "0",
+        "video_bitrate": "40M",
+        "max_fps": "120",
+        "video_codec": "h265",
+    },
+    "balanced": {
+        "max_size": "1920",
+        "video_bitrate": "12M",
+        "max_fps": "60",
+        "video_codec": "h265",
+    },
+    "data-saver": {
+        "max_size": "1280",
+        "video_bitrate": "4M",
+        "max_fps": "30",
+        "video_codec": "h265",
+    },
 }
 
 
@@ -86,10 +112,18 @@ def apply_plugin_settings(config):
         with open(PLUGIN_CONFIG) as handle:
             settings = json.load(handle).get("settings", {}).get(PLUGIN_ID, {})
     except (OSError, ValueError):
-        return config, {}
-    for key, (conf_key, render) in PLUGIN_SETTINGS.items():
-        if key in settings:
-            config[conf_key] = render(settings[key])
+        settings = {}
+    preset = str(settings.get("qualityPreset", "best")).strip().lower()
+    if preset in QUALITY_PRESETS:
+        config.update(QUALITY_PRESETS[preset])
+    else:
+        # "custom" keeps the old expert knobs available without making them
+        # the default path for everybody.
+        for key, (conf_key, render) in PLUGIN_SETTINGS.items():
+            if key in settings:
+                config[conf_key] = render(settings[key])
+    settings = dict(settings)
+    settings["qualityPreset"] = preset if preset in QUALITY_PRESETS or preset == "custom" else "best"
     return config, settings
 
 
@@ -899,6 +933,7 @@ def cmd_setup(config):
             f"max_size = {config['max_size']}\n"
             f"video_bitrate = {config['video_bitrate']}\n"
             f"max_fps = {config['max_fps']}\n"
+            f"video_codec = {config['video_codec']}\n"
         )
     print(f"\nWrote {CONFIG_PATH}:\n  name  = {name}\n  match = {terms}")
     print("\nThe quick toggle will pick it up on the shell's next start.")
@@ -944,6 +979,7 @@ def cmd_mirror(config, configured, passthrough):
         f"--max-size={config['max_size']}",
         f"--video-bit-rate={config['video_bitrate']}",
         f"--max-fps={config['max_fps']}",
+        f"--video-codec={config['video_codec']}",
     ]
     if settings.get("stayAwake", True):
         cmd.append("--stay-awake")
