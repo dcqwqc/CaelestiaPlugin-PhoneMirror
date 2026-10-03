@@ -25,14 +25,18 @@ StyledRect {
     readonly property real outerRadius: expanded
         ? Math.min(height / 2, Tokens.rounding.large)
         : Math.min(width, height) / 2 * Math.min(1, Tokens.rounding.scale)
-    readonly property real innerRadius: Math.min(outerRadius, Tokens.rounding.extraSmall)
+    // Keep adjoining edges visibly rounded; extraSmall looked too square in the
+    // narrow 3-way control.
+    readonly property real innerRadius: Math.min(outerRadius, Tokens.rounding.small)
     readonly property real segmentGap: expanded ? Math.max(2, Math.round(Tokens.spacing.extraSmall / 2)) : 0
     readonly property real usableWidth: width - segmentGap * 2
     readonly property real primaryWidth: expanded ? Math.floor(usableWidth / 3) : width
     readonly property real secondaryWidth: expanded ? Math.floor((usableWidth - primaryWidth) / 2) : 0
 
-    // Deliberately neutral rather than m3primary: the old selected state became
-    // green with the current palette and made these utility actions look loud.
+    // The first segment represents the running PhoneMirror session itself, so
+    // it uses the normal enabled/primary colour. Secondary modes stay neutral.
+    readonly property color powerColour: Colours.palette.m3primary
+    readonly property color powerOnColour: Colours.palette.m3onPrimary
     readonly property color selectedColour: Colours.palette.m3onSurface
     readonly property color selectedOnColour: Colours.palette.m3surface
     readonly property color inactiveColour: Colours.layer(Colours.palette.m3surfaceContainerHighest, 2)
@@ -51,7 +55,9 @@ StyledRect {
         bottomLeftRadius: first ? root.outerRadius : root.innerRadius
         topRightRadius: last ? root.outerRadius : root.innerRadius
         bottomRightRadius: last ? root.outerRadius : root.innerRadius
-        color: selected ? root.selectedColour : root.inactiveColour
+        color: first && root.expanded
+            ? root.powerColour
+            : selected ? root.selectedColour : root.inactiveColour
 
         Behavior on color { CAnim {} }
     }
@@ -98,7 +104,7 @@ StyledRect {
 
         StateLayer {
             id: primaryLayer
-            color: root.inactiveOnColour
+            color: root.expanded ? root.powerOnColour : root.inactiveOnColour
             rect.topLeftRadius: root.outerRadius
             rect.bottomLeftRadius: root.outerRadius
             rect.topRightRadius: root.expanded ? root.innerRadius : root.outerRadius
@@ -112,8 +118,8 @@ StyledRect {
             anchors.verticalCenterOffset: 1
             text: !PhoneMirror.Phone.configured
                 ? "phonelink_setup"
-                : (root.expanded ? "link_off" : "smartphone")
-            color: root.inactiveOnColour
+                : (root.expanded ? "power_settings_new" : "smartphone")
+            color: root.expanded ? root.powerOnColour : root.inactiveOnColour
             fill: 0
             fontStyle: root.expanded ? Tokens.font.icon.small : Tokens.font.icon.medium
         }
@@ -170,7 +176,7 @@ StyledRect {
         MaterialIcon {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
-            text: root.fullscreenActive ? "close_fullscreen" : "open_in_full"
+            text: root.fullscreenActive ? "fullscreen_exit" : "fullscreen"
             color: root.fullscreenActive ? root.selectedOnColour : root.inactiveOnColour
             fill: 0
             fontStyle: Tokens.font.icon.small
