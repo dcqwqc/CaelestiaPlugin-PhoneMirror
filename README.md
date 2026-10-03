@@ -5,6 +5,8 @@ Caelestia plugin.
 
 When the mirror is running, its single quick-toggle slot expands into a three-way control: **disconnect | PIN guide | fullscreen phone mode**. Fullscreen uses the existing immersive mirror path and the bottom-left exit overlay returns to the normal mirror without disconnecting.
 
+PhoneMirror uses Hyprland’s Lua dispatcher-object IPC on 0.55+ for deterministic fullscreen set/unset, with a legacy dispatcher fallback for older Hyprland versions.
+
 The toggle follows the mirror rather than guessing at it: it reads the running
 scrcpy window off the compositor, so closing the mirror from its own window — or
 the handset dropping off wifi — switches the toggle off on its own.

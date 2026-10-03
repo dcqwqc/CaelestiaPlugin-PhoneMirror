@@ -440,28 +440,60 @@ def cmd_doctor(config, configured):
     return 0 if selected else 1
 
 
-REMOTE_PERSIST_SCRIPT = """set -eu
+REMOTE_PERSIST_SCRIPT = r"""set -eu
+PREFIX=/data/data/com.termux/files/usr
+HOME=/data/data/com.termux/files/home
+PATH="$PREFIX/bin:$HOME/bin:$PATH"
+SVDIR="$PREFIX/var/service"
+LOGDIR="$PREFIX/var/log"
 BOOT_DIR="$HOME/.termux/boot"
 BOOT_FILE="$BOOT_DIR/00-phone-mirror-ssh"
-mkdir -p "$BOOT_DIR"
+RUN_FILE="$SVDIR/sshd/run"
+mkdir -p "$BOOT_DIR" "$SVDIR/sshd" "$HOME/.local/state"
+cat > "$RUN_FILE" <<'EOF'
+#!/data/data/com.termux/files/usr/bin/sh
+PREFIX=/data/data/com.termux/files/usr
+TAILSCALE_IP=100.123.63.113
+while ! /system/bin/ip addr 2>/dev/null | grep -q "$TAILSCALE_IP"; do
+    sleep 2
+done
+exec "$PREFIX/bin/sshd" -D -e -f /data/data/com.termux/files/home/.ssh/sshd-mirai.conf 2>&1
+EOF
+chmod 700 "$RUN_FILE"
 cat > "$BOOT_FILE" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
-export PATH="$PREFIX/bin:$HOME/bin:$PATH"
-if command -v termux-wake-lock >/dev/null 2>&1; then
-    termux-wake-lock >/dev/null 2>&1 || true
-fi
-if command -v sshd >/dev/null 2>&1; then
-    pgrep -x sshd >/dev/null 2>&1 || sshd
-fi
+PREFIX=/data/data/com.termux/files/usr
+HOME=/data/data/com.termux/files/home
+PATH="$PREFIX/bin:$HOME/bin:$PATH"
+SVDIR="$PREFIX/var/service"
+LOGDIR="$PREFIX/var/log"
+STATE="$HOME/.local/state"
+LOG="$STATE/phone-mirror-boot.log"
+export PREFIX HOME PATH SVDIR LOGDIR
+mkdir -p "$STATE"
+{
+    echo "=== boot hook $(date -Iseconds) ==="
+    "$PREFIX/bin/termux-wake-lock" >/dev/null 2>&1 || true
+    rm -f "$SVDIR/sshd/down"
+    "$PREFIX/bin/service-daemon" start >/dev/null 2>&1 || true
+    sleep 1
+    "$PREFIX/bin/sv" up "$SVDIR/sshd" || true
+    "$PREFIX/bin/sv" status "$SVDIR/sshd" || true
+} >> "$LOG" 2>&1
 EOF
 chmod 700 "$BOOT_FILE"
-pgrep -x sshd >/dev/null 2>&1 || sshd
+rm -f "$SVDIR/sshd/down"
+export PREFIX HOME PATH SVDIR LOGDIR
+"$PREFIX/bin/service-daemon" start >/dev/null 2>&1 || true
+sleep 1
+"$PREFIX/bin/sv" up "$SVDIR/sshd" >/dev/null 2>&1 || true
 if pm list packages 2>/dev/null | grep -q '^package:com.termux.boot$'; then
     echo TERMUX_BOOT=installed
 else
     echo TERMUX_BOOT=missing
 fi
 echo BOOT_FILE="$BOOT_FILE"
+echo RUN_FILE="$RUN_FILE"
 """
 
 
@@ -596,9 +628,28 @@ def cmd_fullscreen(config, configured, mode):
     address = str(client.get("address") or "").strip()
     if not address:
         return 1
+    selector = f"address:{address}"
+    action = "set" if desired else "unset"
 
+    # Hyprland >= 0.55 with Lua configs requires dispatcher objects rather than
+    # the legacy `hyprctl dispatch fullscreen 0` string syntax.
+    lua = (
+        "hl.dsp.window.fullscreen({ mode = 'fullscreen', "
+        f"action = '{action}', window = '{selector}' }})"
+    )
+    changed = subprocess.run(
+        ["hyprctl", "dispatch", lua],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=2,
+        check=False,
+    )
+    if changed.returncode == 0:
+        return 0
+
+    # Compatibility fallback for pre-0.55 / hyprlang installations.
     focused = subprocess.run(
-        ["hyprctl", "dispatch", "focuswindow", f"address:{address}"],
+        ["hyprctl", "dispatch", "focuswindow", selector],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         timeout=2,
@@ -606,7 +657,6 @@ def cmd_fullscreen(config, configured, mode):
     )
     if focused.returncode != 0:
         return focused.returncode
-
     changed = subprocess.run(
         ["hyprctl", "dispatch", "fullscreen", "0"],
         stdout=subprocess.DEVNULL,
