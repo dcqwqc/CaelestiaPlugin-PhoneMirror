@@ -43,8 +43,8 @@ SettingsObject {
 
     property bool screenOff: false
     SettingMeta on screenOff {
-        label: "Blank the handset's screen"
-        description: "Mirror with the phone's own display turned off."
+        label: "Black the physical phone display"
+        description: "Set the physical phone brightness to zero while mirroring, then restore its previous brightness and mode on exit."
         icon: "mobile_off"
         inputType: SettingMeta.Switch
     }

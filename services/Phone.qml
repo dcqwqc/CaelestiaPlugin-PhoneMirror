@@ -40,6 +40,13 @@ Singleton {
     // it starts the pairing workflow instead of a mirror, which is how you
     // find out the workflow exists.
     property bool configured: false
+    property int displayWidth: 1080
+    property int displayHeight: 2400
+    readonly property real displayAspect: {
+        const w = Math.max(1, Math.min(displayWidth, displayHeight));
+        const h = Math.max(1, Math.max(displayWidth, displayHeight));
+        return w / h;
+    }
 
     readonly property Toplevel toplevel: {
         // qmllint disable unqualified
@@ -110,6 +117,16 @@ Singleton {
         root.setFullscreen(!root.fullscreenActive);
     }
 
+    function setPhysicalScreenBlack(enabled: bool): void {
+        if (!root.running)
+            return;
+        Quickshell.execDetached([root.bin, "display", enabled ? "black" : "restore"]);
+    }
+
+    function restorePhysicalScreen(): void {
+        Quickshell.execDetached([root.bin, "display", "restore"]);
+    }
+
     onRunningChanged: {
         if (!running) {
             pinGuideVisible = false;
@@ -118,6 +135,7 @@ Singleton {
 
         if (running) {
             connecting = false;
+            root.refresh();
             if (pendingAction === "start") {
                 Toaster.toast(qsTr("Phone mirror enabled"), windowTitle ? qsTr("Mirroring %1").arg(windowTitle) : qsTr("The phone mirror is running"), "smartphone");
                 pendingAction = "";
@@ -184,6 +202,10 @@ Singleton {
         settle.stop();
         if (wasRunning) {
             root.pendingAction = "stop";
+            // Start restoring the physical handset before scrcpy exits. The
+            // launcher also restores in a finally block, so manual closes and
+            // crashes are covered too.
+            root.restorePhysicalScreen();
             root.toplevel.close();
         } else if (!killer.running) {
             // Nothing on screen yet -- this is aborting a start still stuck in
@@ -228,6 +250,12 @@ Singleton {
                     const data = JSON.parse(text);
                     root.configured = !!data.configured;
                     root.windowTitle = data.title ?? "";
+                    const width = Number(data.display_width ?? 0);
+                    const height = Number(data.display_height ?? 0);
+                    if (width > 0 && height > 0) {
+                        root.displayWidth = width;
+                        root.displayHeight = height;
+                    }
                 } catch (e) {
                     root.configured = false;
                 }

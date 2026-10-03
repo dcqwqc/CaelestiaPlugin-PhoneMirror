@@ -108,8 +108,8 @@ ColumnLayout {
     ToggleRow {
         Layout.fillWidth: true
         first: true
-        text: "Blank the handset's screen"
-        subtext: "Mirror with the phone's own display turned off."
+        text: "Black the physical phone display"
+        subtext: "Set the physical phone brightness to zero while mirroring, then restore its previous brightness and mode on exit."
         checked: root.settings?.screenOff ?? false
         onToggled: if (root.settings) root.settings.screenOff = checked
     }

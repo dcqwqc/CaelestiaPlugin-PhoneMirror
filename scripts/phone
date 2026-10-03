@@ -12,6 +12,7 @@ particular model.
     phone status         machine-readable state, for the shell's quick toggle
     phone input-key KEY  send one PIN digit/backspace to the connected handset
     phone fullscreen MODE toggle immersive mirror view (on/off/toggle/status)
+    phone display MODE    black/restore the physical handset display
 
 Anything starting with '-' is passed straight through to scrcpy, which is what
 phone-low and phone-off rely on.
@@ -168,6 +169,107 @@ def save_state(**changes):
         os.replace(tmp, STATE_PATH)
     except OSError:
         pass
+
+
+def _adb_setting(serial, namespace, key):
+    value = run(["adb", "-s", serial, "shell", "settings", "get", namespace, key], timeout=2)
+    return value.strip()
+
+
+def _adb_put_setting(serial, namespace, key, value):
+    result = subprocess.run(
+        ["adb", "-s", serial, "shell", "settings", "put", namespace, key, str(value)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=2,
+        check=False,
+    )
+    return result.returncode == 0
+
+
+def get_display_size(serial):
+    """Return the effective Android display size as (width, height)."""
+    out = run(["adb", "-s", serial, "shell", "wm", "size"], timeout=2)
+    matches = re.findall(r"(\d+)x(\d+)", out)
+    if not matches:
+        return 0, 0
+    width, height = matches[-1]
+    return int(width), int(height)
+
+
+def black_phone_display(serial):
+    """Dim the physical OLED to zero while preserving what must be restored."""
+    state = load_state()
+    restore = state.get("phone_display_restore")
+    if isinstance(restore, dict) and restore.get("active"):
+        # Already blacked by us. Do not overwrite the original values with zero.
+        return True
+
+    brightness = _adb_setting(serial, "system", "screen_brightness")
+    mode = _adb_setting(serial, "system", "screen_brightness_mode")
+    if not brightness or brightness == "null":
+        return False
+
+    save_state(
+        phone_display_restore={
+            "active": True,
+            "serial": serial,
+            "brightness": brightness,
+            "mode": mode if mode and mode != "null" else "0",
+        }
+    )
+
+    # Manual mode is required on many Android builds or auto-brightness will
+    # immediately raise the panel again. A value of 0 is true black on OLED
+    # devices that expose the full brightness range.
+    _adb_put_setting(serial, "system", "screen_brightness_mode", "0")
+    if not _adb_put_setting(serial, "system", "screen_brightness", "0"):
+        restore_phone_display(serial)
+        return False
+    return True
+
+
+def restore_phone_display(serial=None):
+    """Restore the brightness/mode captured before black_phone_display()."""
+    state = load_state()
+    restore = state.get("phone_display_restore")
+    if not isinstance(restore, dict) or not restore.get("active"):
+        return True
+
+    target = serial or str(restore.get("serial") or "")
+    if not target or not adb_target_healthy(target):
+        # Keep the record: a later healthy ADB connection can still restore it.
+        return False
+
+    brightness = str(restore.get("brightness") or "")
+    mode = str(restore.get("mode") or "0")
+    ok = bool(brightness)
+    if brightness:
+        ok = _adb_put_setting(target, "system", "screen_brightness", brightness) and ok
+    ok = _adb_put_setting(target, "system", "screen_brightness_mode", mode) and ok
+    if ok:
+        save_state(phone_display_restore={"active": False})
+    return ok
+
+
+def cmd_display(config, configured, mode):
+    if not configured:
+        return 2
+    target = select_target(get_devices(), config)
+    if not target or not adb_target_healthy(target):
+        return 1
+
+    mode = (mode or "status").strip().lower()
+    if mode == "status":
+        restore = load_state().get("phone_display_restore")
+        print("black" if isinstance(restore, dict) and restore.get("active") else "normal")
+        return 0
+    if mode in ("black", "on", "1", "true"):
+        return 0 if black_phone_display(target) else 1
+    if mode in ("restore", "normal", "off", "0", "false"):
+        return 0 if restore_phone_display(target) else 1
+    print("display mode must be black, restore, or status", file=sys.stderr)
+    return 2
 
 
 def adb_connect(endpoint, timeout=5):
@@ -559,14 +661,18 @@ def cmd_status(config, configured):
     devices = get_devices()
     target_device = select_target_device(devices, config) if configured else None
     target = target_device["serial"] if target_device else None
+    display_width = 0
+    display_height = 0
     if target and adb_target_healthy(target):
         cache_wireless_target(target, config)
+        display_width, display_height = get_display_size(target)
     elif target:
         target_device = None
         target = None
     active_transport = ""
     if target_device:
         active_transport = "usb" if target_device.get("usb") else "wireless_adb"
+    restore = load_state().get("phone_display_restore")
     json.dump(
         {
             "configured": configured,
@@ -578,6 +684,9 @@ def cmd_status(config, configured):
             "active_transport": active_transport,
             "tailscale_ip": config.get("tailscale_ip", ""),
             "ssh_host": config.get("ssh_host", ""),
+            "display_width": display_width,
+            "display_height": display_height,
+            "physical_display_black": bool(isinstance(restore, dict) and restore.get("active")),
             "config": CONFIG_PATH,
         },
         sys.stdout,
@@ -818,6 +927,14 @@ def cmd_mirror(config, configured, passthrough):
         print(f"\n[ERROR] {message}\n", file=sys.stderr)
         return 1
 
+    # Recover a stale dimming record first (for example after the laptop was
+    # rebooted while mirroring), then capture a fresh baseline if the persistent
+    # "black physical phone" preference is enabled.
+    restore_phone_display(target)
+    dimmed_here = False
+    if settings.get("screenOff", False):
+        dimmed_here = black_phone_display(target)
+
     cmd = [
         "scrcpy",
         f"--serial={target}",
@@ -830,10 +947,15 @@ def cmd_mirror(config, configured, passthrough):
     ]
     if settings.get("stayAwake", True):
         cmd.append("--stay-awake")
-    if settings.get("screenOff", False):
-        cmd.append("--turn-screen-off")
     cmd.extend(passthrough)
-    os.execvp("scrcpy", cmd)
+
+    try:
+        return subprocess.run(cmd, check=False).returncode
+    finally:
+        # Every normal close path (toggle, fullscreen overlay power button,
+        # window close, scrcpy error) comes back through here.
+        if dimmed_here or load_state().get("phone_display_restore", {}).get("active"):
+            restore_phone_display(target)
 
 
 def main():
@@ -856,6 +978,8 @@ def main():
             return cmd_input_key(config, configured, rest[0] if rest else "")
         if command == "fullscreen":
             return cmd_fullscreen(config, configured, rest[0] if rest else "toggle")
+        if command == "display":
+            return cmd_display(config, configured, rest[0] if rest else "status")
         if command == "pair":
             return cmd_pair(config)
         if command == "setup":

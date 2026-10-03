@@ -153,3 +153,7 @@ Install on a systemd-user host with:
 
 For handset reboot persistence, Termux still needs Termux:Boot installed and
 opened once so Android executes `~/.termux/boot/` after boot.
+
+## Immersive phone mode
+
+Fullscreen phone mode uses true-black side gutters around the portrait mirror. The left gutter keeps laptop volume visible, the right gutter keeps laptop brightness visible, and the bottom-left flat controls can leave fullscreen, toggle the physical phone display to black, or close the mirror. The phone-display toggle is persistent; the launcher snapshots Android brightness and brightness mode and restores both whenever the mirror exits.
