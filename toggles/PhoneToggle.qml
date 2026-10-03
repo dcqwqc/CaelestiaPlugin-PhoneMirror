@@ -112,10 +112,10 @@ StyledRect {
             anchors.verticalCenterOffset: 1
             text: !PhoneMirror.Phone.configured
                 ? "phonelink_setup"
-                : (root.expanded ? "power_settings_new" : "smartphone")
+                : (root.expanded ? "link_off" : "smartphone")
             color: root.inactiveOnColour
-            fill: root.expanded ? 1 : 0
-            fontStyle: Tokens.font.icon.medium
+            fill: 0
+            fontStyle: root.expanded ? Tokens.font.icon.small : Tokens.font.icon.medium
         }
     }
 
@@ -141,10 +141,10 @@ StyledRect {
         MaterialIcon {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
-            text: "dialpad"
+            text: "pin"
             color: root.overlayActive ? root.selectedOnColour : root.inactiveOnColour
-            fill: root.overlayActive ? 1 : 0
-            fontStyle: Tokens.font.icon.medium
+            fill: 0
+            fontStyle: Tokens.font.icon.small
         }
     }
 
@@ -170,10 +170,10 @@ StyledRect {
         MaterialIcon {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 1
-            text: root.fullscreenActive ? "fullscreen_exit" : "fullscreen"
+            text: root.fullscreenActive ? "close_fullscreen" : "open_in_full"
             color: root.fullscreenActive ? root.selectedOnColour : root.inactiveOnColour
-            fill: root.fullscreenActive ? 1 : 0
-            fontStyle: Tokens.font.icon.medium
+            fill: 0
+            fontStyle: Tokens.font.icon.small
         }
     }
 
