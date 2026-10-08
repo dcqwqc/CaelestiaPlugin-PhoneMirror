@@ -162,7 +162,7 @@ Singleton {
     // also finishes on its own schedule, so watch for the config appearing
     // rather than asking the user to restart the shell.
     function setUp(): void {
-        Quickshell.execDetached(["kitty", "-e", root.bin, "pair"]);
+        Quickshell.execDetached(["ghostty", "-e", root.bin, "pair"]);
         pairWatch.attempts = 0;
         pairWatch.restart();
     }
