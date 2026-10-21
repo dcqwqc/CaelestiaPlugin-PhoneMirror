@@ -22,16 +22,6 @@
       }
     },
     {
-      "type": "shell-panel",
-      "source": "overlay/FullscreenShellBridge.qml",
-      "properties": {
-        "edge": "right",
-        "alignment": "center",
-        "interactive": false,
-        "deformAmount": 0
-      }
-    },
-    {
       "type": "quick-toggle",
       "source": "toggles/PhoneToggle.qml",
       "properties": {
@@ -40,5 +30,6 @@
     }
   ],
   "settings": "Settings.qml",
-  "settingsUi": "SettingsUi.qml"
+  "settingsUi": "SettingsUi.qml",
+  "requires": ">=2.1.0"
 }
